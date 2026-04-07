@@ -1,0 +1,32 @@
+{
+  "domain": "leelen",
+  "name": "Leelen Home",
+  "codeowners": [
+    "@snailll"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "persistent_notification",
+    "ffmpeg",
+    "zeroconf"
+  ],
+  "documentation": "",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "",
+  "loggers": [
+    "Leelen Home"
+  ],
+  "requirements": [
+    "construct>=2.10.56",
+    "paho-mqtt",
+    "numpy",
+    "cryptography",
+    "psutil",
+    "aiosqlite>=0.17.0",
+    "aiohttp>=3.8.0",
+    "aiofiles>=0.7.0"
+  ],
+  "version": "v0.2.4"
+}
