@@ -2,17 +2,17 @@
   "domain": "leelen",
   "name": "Leelen Home",
   "codeowners": [
-    "@snailll"
+    "@snailll2"
   ],
   "config_flow": true,
   "dependencies": [
     "http",
     "persistent_notification"
   ],
-  "documentation": "https://github.com/snailll/leelen-home",
+  "documentation": "https://github.com/snailll2/leelen_home",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/snailll/leelen-home/issues",
+  "issue_tracker": "https://github.com/snailll2/leelen_home/issues",
   "loggers": [
     "custom_components.leelen"
   ],
