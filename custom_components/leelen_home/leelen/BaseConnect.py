@@ -563,7 +563,7 @@ class BaseConnect(ABC):
                 # 检查心跳超时
                 if time.time() - self._pre_heartbeat_recv_time > self.config.heartbeat_timeout:
                     self._pre_heartbeat_start_time = time.time()
-                    LogUtils.e(self._tag, "Heartbeat timeout, resetting connection")
+                    LogUtils.e(self._tag, f"💥Heartbeat timeout for {self.config.heartbeat_timeout} seconds, resetting connection")
                     self.reset()
                 else:
                     self.send_data(self._heartbeat_data)
