@@ -134,7 +134,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
             # 收集所有实体ID
             all_entities = {
-                f"leelen_{device.get('dev_addr')}_{logic_srv.get('logic_addr')}"
+                f"leelen_logic_addr_{logic_srv.get('logic_addr')}"
                 for device in all_devices
                 for logic_srv in device.get("logic_srv", [])
             }
@@ -147,10 +147,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             existing_device_ids = set()
             for entry in entity_registry.entities.values():
                 if entry.config_entry_id == self._entry_id and entry.unique_id:
-                    # 从 unique_id 提取设备ID: leelen_{dev_addr}_{logic_addr}
+                    # 从 unique_id 提取设备ID: leelen_logic_addr_{logic_addr}
                     parts = entry.unique_id.split("_")
                     if len(parts) >= 2 and parts[0] == "leelen":
-                        existing_device_ids.add(parts[1])
+                        existing_device_ids.add(entry.unique_id)
 
             # 清理已删除的设备（只清理当前配置项的）
             device_registry = dr.async_get(self.hass)
