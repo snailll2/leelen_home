@@ -1,5 +1,5 @@
 {
-  "domain": "leelen",
+  "domain": "leelen_home",
   "name": "Leelen Home",
   "codeowners": [
     "@snailll2"
@@ -14,7 +14,7 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/snailll2/leelen_home/issues",
   "loggers": [
-    "custom_components.leelen"
+    "custom_components.leelen_home"
   ],
   "requirements": [
     "aiosqlite>=0.17.0",
