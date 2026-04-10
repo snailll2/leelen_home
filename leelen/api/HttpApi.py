@@ -40,8 +40,8 @@ class HttpApi:
         self._hass = hass
         self._device_list = []
 
-    @classmethod
-    def get_secret(num: int) -> str:
+    
+    def get_secret(self, num: int) -> str:
         chars = string.ascii_letters + string.digits  # equivalent to "abcdef...6789"
         return ''.join(random.choice(chars) for _ in range(num))
 
@@ -198,7 +198,7 @@ class HttpApi:
     def encrypt_params(self, obj: Any, public_key: str) -> 'BaseParam':
         """Encrypt parameters using AES and RSA encryption."""
         json_string = json.dumps(obj).replace(" ", "")
-        secret = HttpApi.get_secret(16)
+        secret = self.get_secret(16)
         sha256_hash = hashlib.sha256(json_string.encode())
         encrypted_hash = sha256_hash.hexdigest()
 
