@@ -50,58 +50,27 @@ async def _create_entities(hass: HomeAssistant, config_entry: ConfigEntry) -> li
             dev_name = device_info.get("dev_name")
 
             if logic_type == LogicDeviceType.TYPE_TEMPERATURE_SENSOR:
-                entities.append(_create_sensor(
-                    addr, dev_addr, name, dev_name, "temperature", "°C", config_entry
-                ))
+                entity = Sensor(addr, dev_addr, name, dev_name, "temperature", "°C", config_entry)
+                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
+                entities.append(entity)
             elif logic_type == LogicDeviceType.TYPE_PM_SENSOR:
-                entities.append(_create_sensor(
-                    addr, dev_addr, name, dev_name, "pm25", "µg/m³", config_entry
-                ))
+                entity = Sensor(addr, dev_addr, name, dev_name, "pm25", "µg/m³", config_entry)
+                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
+                entities.append(entity)
             elif logic_type == LogicDeviceType.TYPE_HUMIDITY_SENSOR:
-                entities.append(_create_sensor(
-                    addr, dev_addr, name, dev_name, "humidity", "%", config_entry
-                ))
+                entity = Sensor(addr, dev_addr, name, dev_name, "humidity", "%", config_entry)
+                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
+                entities.append(entity)
             elif logic_type == LogicDeviceType.TYPE_WIRELESS_DOOR_SENSOR:
-                entities.append(_create_binary_sensor(
-                    addr, dev_addr, name, dev_name, "door", config_entry
-                ))
+                entity = BinarySensor(addr, dev_addr, name, dev_name, "door", config_entry)
+                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
+                entities.append(entity)
             elif logic_type == LogicDeviceType.TYPE_WIRELESS_WATER_IMMERSION_SENSOR:
-                entities.append(_create_binary_sensor(
-                    addr, dev_addr, name, dev_name, "moisture", config_entry
-                ))
+                entity = BinarySensor(addr, dev_addr, name, dev_name, "moisture", config_entry)
+                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
+                entities.append(entity)
 
     return entities
-
-
-def _create_sensor(
-    logic_addr: int,
-    device_id: str,
-    name: str,
-    dev_name: str,
-    device_class: str,
-    unit: str,
-    config_entry: ConfigEntry,
-) -> Sensor:
-    """Create a sensor entity."""
-    entity = Sensor(logic_addr, device_id, name, dev_name, device_class, unit, config_entry)
-    hass = config_entry.runtime_data  # type: ignore
-    hass.data[DOMAIN]["entities"][entity.unique_id] = entity
-    return entity
-
-
-def _create_binary_sensor(
-    logic_addr: int,
-    device_id: str,
-    name: str,
-    dev_name: str,
-    device_class: str,
-    config_entry: ConfigEntry,
-) -> BinarySensor:
-    """Create a binary sensor entity."""
-    entity = BinarySensor(logic_addr, device_id, name, dev_name, device_class, config_entry)
-    hass = config_entry.runtime_data  # type: ignore
-    hass.data[DOMAIN]["entities"][entity.unique_id] = entity
-    return entity
 
 
 class Sensor(SensorEntity):
