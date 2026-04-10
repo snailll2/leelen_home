@@ -1,7 +1,7 @@
 {
   "name": "Leelen Home",
   "content_in_root": false,
-  "filename": "leelen.zip",
+  "filename": "leelen_home",
   "country": ["CN"],
   "homeassistant": "2024.1.0",
   "render_readme": true,
