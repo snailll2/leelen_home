@@ -256,12 +256,12 @@ class Climate(ClimateEntity, RestoreEntity):
         return min(self._attr_max_temp, DEFAULT_MAX_TEMP)
 
     @property
-    def target_temperature(self):
-        return self._attr_target_temperature
-    
+    def target_temperature(self) -> float:
+        return float(self._attr_target_temperature)
+
     @property
-    def current_temperature(self):
-        return self._attr_current_temperature
+    def current_temperature(self) -> float:
+        return float(self._attr_current_temperature)
 
     @property
     def target_temperature_step(self):
@@ -288,9 +288,9 @@ class Climate(ClimateEntity, RestoreEntity):
         temperature = kwargs.get("temperature")
         if temperature is None:
             return
-        self._attr_target_temperature = temperature
+        self._attr_target_temperature = float(temperature)
         self._lin.power_state = 3
-        self._lin.setting_temperature = temperature
+        self._lin.setting_temperature = self._attr_target_temperature
         ControlModel.get_instance().control(self._lin)
         self.async_write_ha_state()
 
@@ -322,9 +322,11 @@ class Climate(ClimateEntity, RestoreEntity):
         LogUtils.d(__name__, f"Climate {self._name} update: {state}")
 
         if state.get_service_type() == FunctionType.FUNCTION_AC_TEMP:
-            self._attr_current_temperature = state.get_value()
+            value = state.get_value()
+            self._attr_current_temperature = float(value) if value is not None else None
         else:
             self._prop_on = state.power_state == 1
             self._attr_fan_mode = SPEED_FAN_MODE_MAP.get(state.speed, FAN_LOW)
             self._attr_hvac_mode = MODE_HVAC_MAP.get(state.mode, HVACMode.FAN_ONLY)
-            self._attr_target_temperature = state.setting_temperature
+            setting_temp = state.setting_temperature
+            self._attr_target_temperature = float(setting_temp) if setting_temp is not None else 25.0
