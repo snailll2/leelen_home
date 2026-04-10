@@ -111,12 +111,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self._entry_id = config_entry.entry_id
         self._config_entry = config_entry
         self._config = dict(config_entry.options.get(OPTIONS_CONFIG, {}))
+        self._refresh_stats: dict[str, str] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """初始选项菜单，提供刷新按钮"""
         return self.async_show_menu(
             step_id="init",
-            menu_options=["refresh", "cancel"],
+            menu_options=["refresh"],
         )
 
     async def async_step_refresh(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -125,6 +126,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         try:
             device_addr = self._config_entry.data[CONF_DEVICE_ADDR]
             all_devices = await HttpApi.get_instance(self.hass).refresh_devices(device_addr)
+
+            # 确保DOMAIN数据结构存在
+            self.hass.data.setdefault(DOMAIN, {})
+            self.hass.data[DOMAIN].setdefault("devices", {})
             self.hass.data[DOMAIN]["devices"][self._entry_id] = all_devices
 
             # 收集所有实体ID
@@ -134,11 +139,19 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 for logic_srv in device.get("logic_srv", [])
             }
 
-            # 清理已删除的设备
+            # 获取当前设备ID集合（在清理之前）
             device_registry = dr.async_get(self.hass)
             current_device_ids = {device.get("dev_addr") for device in all_devices}
+            existing_device_ids = {
+                identifier[1]
+                for dev in device_registry.devices.values()
+                for identifier in dev.identifiers
+                if identifier[0] == "LEELEN_HOME"
+            }
+
+            # 清理已删除的设备
             removed = 0
-            for dev in device_registry.devices.values():
+            for dev in list(device_registry.devices.values()):
                 for identifier in dev.identifiers:
                     if identifier[0] == "LEELEN_HOME" and identifier[1] not in current_device_ids:
                         _LOGGER.info("移除设备 %s，因为已从数据库中删除", identifier[1])
@@ -158,25 +171,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # 触发实体更新
             async_dispatcher_send(self.hass, "leelen_integration_device_refresh")
 
-            # 计算统计信息
-            existing_device_ids = {
-                identifier[1]
-                for dev in device_registry.devices.values()
-                for identifier in dev.identifiers
-                if identifier[0] == "LEELEN_HOME"
-            }
+            # 计算统计信息并跳转到结果页面
             added = len(current_device_ids - existing_device_ids)
-
-            return self.async_show_form(
-                step_id="refresh_result",
-                data_schema=vol.Schema({}),
-                description_placeholders={
-                    "total": str(len(all_devices)),
-                    "added": str(added),
-                    "removed": str(removed),
-                    "removed_entities": str(removed_entities)
-                },
-            )
+            self._refresh_stats = {
+                "total": str(len(all_devices)),
+                "added": str(added),
+                "removed": str(removed),
+                "removed_entities": str(removed_entities)
+            }
+            return await self.async_step_refresh_result()
         except Exception as exc:
             _LOGGER.exception("刷新设备失败")
             LogUtils.e(exc)
@@ -190,8 +193,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_refresh_result(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """刷新结果页面"""
-        return self.async_abort(reason="refresh_success")
+        if user_input is not None:
+            return self.async_create_entry(title="", data={})
 
-    async def async_step_cancel(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """处理取消操作"""
-        return self.async_create_entry(title="操作已取消", data={})
+        return self.async_show_form(
+            step_id="refresh_result",
+            data_schema=vol.Schema({}),
+            description_placeholders=self._refresh_stats,
+        )
