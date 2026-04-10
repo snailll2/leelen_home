@@ -139,30 +139,39 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 for logic_srv in device.get("logic_srv", [])
             }
 
-            # 获取当前设备ID集合（在清理之前）
-            device_registry = dr.async_get(self.hass)
-            current_device_ids = {device.get("dev_addr") for device in all_devices}
-            existing_device_ids = {
-                identifier[1]
-                for dev in device_registry.devices.values()
-                for identifier in dev.identifiers
-                if identifier[0] == "LEELEN_HOME"
-            }
+            # 获取当前设备ID集合（确保都是字符串类型）
+            current_device_ids = {str(device.get("dev_addr")) for device in all_devices}
 
-            # 清理已删除的设备
+            # 获取当前配置项已有的设备ID（通过检查实体的config_entry_id）
+            entity_registry = er.async_get(self.hass)
+            existing_device_ids = set()
+            for entry in entity_registry.entities.values():
+                if entry.config_entry_id == self._entry_id and entry.unique_id:
+                    # 从 unique_id 提取设备ID: leelen_{dev_addr}_{logic_addr}
+                    parts = entry.unique_id.split("_")
+                    if len(parts) >= 2 and parts[0] == "leelen":
+                        existing_device_ids.add(parts[1])
+
+            # 清理已删除的设备（只清理当前配置项的）
+            device_registry = dr.async_get(self.hass)
             removed = 0
             for dev in list(device_registry.devices.values()):
+                # 检查设备是否属于当前配置项
+                dev_entry_ids = getattr(dev, 'config_entries', set())
+                if self._entry_id not in dev_entry_ids:
+                    continue
                 for identifier in dev.identifiers:
-                    if identifier[0] == "LEELEN_HOME" and identifier[1] not in current_device_ids:
+                    if identifier[0] == "LEELEN_HOME" and str(identifier[1]) not in current_device_ids:
                         _LOGGER.info("移除设备 %s，因为已从数据库中删除", identifier[1])
                         device_registry.async_remove_device(dev.id)
                         removed += 1
                         break
 
-            # 删除无用实体
-            entity_registry = er.async_get(self.hass)
+            # 删除无用实体（只删除当前配置项的）
             removed_entities = 0
             for entry in list(entity_registry.entities.values()):
+                if entry.config_entry_id != self._entry_id:
+                    continue
                 unique_id = entry.unique_id
                 if unique_id and unique_id.startswith("leelen_") and unique_id not in all_entities:
                     entity_registry.async_remove(entry.entity_id)
@@ -171,7 +180,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # 触发实体更新
             async_dispatcher_send(self.hass, "leelen_integration_device_refresh")
 
-            # 计算统计信息并跳转到结果页面
+            # 计算统计信息：新增 = 当前设备 - 已有设备
             added = len(current_device_ids - existing_device_ids)
             self._refresh_stats = {
                 "total": str(len(all_devices)),
