@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /d/200-Person/leelen_home/custom_components -type d -name \"__pycache__\" -exec rm -rf {} +)",
+      "Bash(git add:*)"
+    ]
+  }
+}

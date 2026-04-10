@@ -1,0 +1,9 @@
+{
+  "name": "Leelen Home",
+  "content_in_root": false,
+  "filename": "leelen.zip",
+  "country": ["CN"],
+  "homeassistant": "2024.1.0",
+  "render_readme": true,
+  "iot_class": "Cloud Polling"
+}

@@ -1,0 +1,52 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "该手机号已配置",
+      "refresh_success": "设备列表已成功刷新"
+    },
+    "error": {
+      "invalid_phone": "请输入有效的11位手机号",
+      "sms_rate_limit": "短信发送频率超限，请稍后重试",
+      "invalid_code": "验证码错误",
+      "login_failed": "登录失败"
+    },
+    "step": {
+      "user": {
+        "title": "立林账号登录",
+        "description": "请输入手机号获取验证码",
+        "data": {
+          "phone": "手机号"
+        }
+      },
+      "verify": {
+        "title": "验证码登录",
+        "description": "请输入短信验证码",
+        "data": {
+          "code": "验证码"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "设备管理",
+        "menu_options": {
+          "refresh": "同步设备",
+          "cancel": "取消"
+        }
+      },
+      "refresh": {
+        "title": "同步设备",
+        "description": "从立林云同步设备到 Home Assistant"
+      },
+      "refresh_result": {
+        "title": "同步完成",
+        "description": "共发现设备 {total} 台\n新增设备：{added} 台\n移除设备：{removed} 台\n移除实体：{removed_entities} 个"
+      },
+      "cancel": {
+        "title": "已取消"
+      }
+    }
+  }
+}

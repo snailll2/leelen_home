@@ -1,0 +1,52 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This phone number is already configured",
+      "refresh_success": "Device list has been successfully refreshed"
+    },
+    "error": {
+      "invalid_phone": "Please enter a valid 11-digit phone number",
+      "sms_rate_limit": "SMS rate limit exceeded, please try again later",
+      "invalid_code": "Invalid verification code",
+      "login_failed": "Login failed"
+    },
+    "step": {
+      "user": {
+        "title": "Leelen Account Login",
+        "description": "Enter your phone number to receive verification code",
+        "data": {
+          "phone": "Phone Number"
+        }
+      },
+      "verify": {
+        "title": "Verification Code Login",
+        "description": "Enter the SMS verification code",
+        "data": {
+          "code": "Verification Code"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Device Management",
+        "menu_options": {
+          "refresh": "Sync Devices",
+          "cancel": "Cancel"
+        }
+      },
+      "refresh": {
+        "title": "Sync Devices",
+        "description": "Sync devices from Leelen Cloud to Home Assistant"
+      },
+      "refresh_result": {
+        "title": "Sync Completed",
+        "description": "Total devices found: {total}\nAdded devices: {added}\nRemoved devices: {removed}\nRemoved entities: {removed_entities}"
+      },
+      "cancel": {
+        "title": "Canceled"
+      }
+    }
+  }
+}
