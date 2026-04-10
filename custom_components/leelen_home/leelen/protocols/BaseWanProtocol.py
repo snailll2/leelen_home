@@ -1,427 +1,197 @@
-"""
-广域网协议基类
-
-提供广域网通信协议的基础功能，包括：
-- 协议数据解析
-- 协议数据构建
-- 用户名/密码编码
-- 校验和计算
-
-Classes:
-    BaseWanProtocol: 广域网协议基类
-"""
-
 import threading
-from typing import Optional, ClassVar
-from dataclasses import dataclass, field
+from typing import Optional
 
-from ..common import LeelenConst, ProtocolDefault
+from ..common import LeelenConst
+from ..common import ProtocolDefault
 from ..utils.ConvertUtils import ConvertUtils
 from ..utils.LogUtils import LogUtils
-from ..utils.Exceptions import ProtocolException, safe_execute
-
-
-@dataclass
-class WanProtocolHeader:
-    """
-    广域网协议头结构
-
-    Attributes:
-        sync_header: 同步头 (3 bytes)
-        protocol_ver: 协议版本 (2 bytes)
-        cmd: 命令 (2 bytes)
-        session_id: 会话ID (4 bytes)
-        action_type: 动作类型 (1 byte)
-        encrypted: 加密标志 (1 byte)
-        length: 数据长度 (4 bytes)
-        source: 源地址 (8 bytes)
-        dest: 目的地址 (8 bytes)
-    """
-    sync_header: bytes = field(default_factory=lambda: LeelenConst.WAN_SYNC_HEADER)
-    protocol_ver: bytes = field(default_factory=lambda: ProtocolDefault.PROTOCOL_VER_WAN)
-    cmd: bytes = field(default_factory=lambda: bytes(2))
-    session_id: bytes = field(default_factory=lambda: bytes(4))
-    action_type: int = 0
-    encrypted: int = 0
-    length: int = 0
-    source: bytes = field(default_factory=lambda: bytes(8))
-    dest: bytes = field(default_factory=lambda: bytes(8))
-
-    # 常量
-    HEAD_LENGTH: ClassVar[int] = 33
-    TAIL_LENGTH: ClassVar[int] = 3
-    LENGTH_MIN: ClassVar[int] = 36
-
-    def to_bytes(self) -> bytes:
-        """将头部转换为字节"""
-        buffer = bytearray()
-        buffer.extend(self.sync_header)
-        buffer.extend(self.protocol_ver)
-        buffer.extend(self.cmd)
-        buffer.extend(self.session_id)
-        buffer.append(self.action_type)
-        buffer.append(self.encrypted)
-        buffer.extend(ConvertUtils.to_bytes(self.length, little_endian=True))
-        buffer.extend(self.source)
-        buffer.extend(self.dest)
-        return bytes(buffer)
-
-
-@dataclass
-class WanProtocolTail:
-    """
-    广域网协议尾结构
-
-    Attributes:
-        reserved_bytes: 保留字节 (2 bytes)
-        checksum: 校验和 (1 byte)
-    """
-    reserved_bytes: bytes = field(default_factory=lambda: bytes([0xFF, 0xFF]))
-    checksum: int = 0
-
-    def to_bytes(self) -> bytes:
-        """将尾部转换为字节"""
-        buffer = bytearray()
-        buffer.extend(self.reserved_bytes)
-        buffer.append(self.checksum)
-        return bytes(buffer)
 
 
 class BaseWanProtocol:
-    """
-    广域网协议基类
-
-    提供WAN协议的基础功能，子类需要实现 build_body 方法。
-
-    Attributes:
-        TAG: 日志标签
-        cmd: 命令字节
-        response_code: 响应码
-        session_id: 会话ID
-    """
-
-    # 类级别的序列号和锁
-    _seq: ClassVar[int] = 9
-    _session_id: ClassVar[int] = 0
-    _seq_lock: ClassVar[threading.Lock] = threading.Lock()
-    _session_lock: ClassVar[threading.Lock] = threading.Lock()
-
-    # 常量
-    LENGTH_MIN: ClassVar[int] = 36
-    TAG: ClassVar[str] = "BaseWanProtocol"
-
-    # 用户名/密码编码常量
-    USERNAME_LENGTH: ClassVar[int] = 20
-    PASSWORD_LENGTH: ClassVar[int] = 32
-    PADDING_BYTE: ClassVar[int] = 0xFF
+    LENGTH_MIN = 36
+    TAG = "BaseWanProtocol"
+    _i_seq = 9
+    _i_session_id = 0
+    _seq_lock = threading.Lock()
+    _session_lock = threading.Lock()
 
     def __init__(self):
-        """初始化协议对象"""
-        # 头部
-        self._header = WanProtocolHeader()
-
-        # 尾部
-        self._tail = WanProtocolTail()
-
-        # 数据部分
-        self._request_data: Optional[bytes] = None
-        self._request_data_body: Optional[bytes] = None
-        self._request_data_head: Optional[bytes] = None
-        self._request_data_tail: Optional[bytes] = None
-
-        # 响应相关
-        self.response_code: int = 0
-        self.body_length: int = 0
-
-    # region 属性访问
-
-    @property
-    def cmd(self) -> Optional[bytes]:
-        """获取命令字节"""
-        return self._header.cmd
-
-    @cmd.setter
-    def cmd(self, value: bytes) -> None:
-        """设置命令字节"""
-        self._header.cmd = value
-
-    @property
-    def session_id(self) -> Optional[bytes]:
-        """获取会话ID"""
-        return self._header.session_id
-
-    @session_id.setter
-    def session_id(self, value: bytes) -> None:
-        """设置会话ID"""
-        self._header.session_id = value
-
-    @property
-    def action_type(self) -> int:
-        """获取动作类型"""
-        return self._header.action_type
-
-    @action_type.setter
-    def action_type(self, value: int) -> None:
-        """设置动作类型"""
-        self._header.action_type = value
-
-    @property
-    def source(self) -> bytes:
-        """获取源地址"""
-        return self._header.source
-
-    @property
-    def dest(self) -> bytes:
-        """获取目的地址"""
-        return self._header.dest
-
-    @property
-    def request_data_body(self) -> Optional[bytes]:
-        """获取请求数据体"""
-        return self._request_data_body
-
-    @request_data_body.setter
-    def request_data_body(self, value: Optional[bytes]) -> None:
-        """设置请求数据体"""
-        self._request_data_body = value
-
-    @property
-    def request_data(self) -> Optional[bytes]:
-        """获取完整请求数据"""
-        return self._request_data
-
-    # endregion
-
-    # region 静态方法
+        self.action_type = 0
+        self.body_length = 0
+        self.checksum = 0
+        self.cmd = None
+        self.dest = None
+        self.encrypted = 0
+        self.head_length = 33
+        self.length = 0
+        self.protocol_ver = ProtocolDefault.PROTOCOL_VER_WAN
+        self.request_data = None
+        self.request_data_body = None
+        self.request_data_head = None
+        self.request_data_tail = None
+        self.reserved_bytes = bytes([0xFF, 0xFF])
+        self.response_code = 0
+        self.session_id = None
+        self.source = None
+        self.tail_length = 3
 
     @classmethod
     def get_seq(cls) -> int:
-        """
-        获取下一个序列号
-
-        Returns:
-            递增的序列号（0-65535循环）
-        """
         with cls._seq_lock:
-            seq = cls._seq
-            cls._seq = (cls._seq + 1) & 0xFFFF
+            seq = cls._i_seq
+            cls._i_seq = (cls._i_seq + 1) & 0xFFFF
             return seq
 
     @classmethod
     def get_session_id(cls) -> int:
-        """
-        获取下一个会话ID
-
-        Returns:
-            递增的会话ID
-        """
         with cls._session_lock:
-            session_id = cls._session_id
-            cls._session_id += 1
+            session_id = cls._i_session_id
+            cls._i_session_id += 1
             return session_id
 
     @classmethod
     def parse(cls, data: bytes) -> Optional['BaseWanProtocol']:
-        """
-        解析协议数据
-
-        Args:
-            data: 原始协议数据
-
-        Returns:
-            解析后的协议对象，失败返回None
-        """
         if not data:
-            LogUtils.e(cls.TAG, "Data is None")
+            LogUtils.e(cls.TAG, "data is None")
             return None
 
         if len(data) == 0:
-            LogUtils.e(cls.TAG, "Data length is 0")
+            LogUtils.e(cls.TAG, "data length = 0")
             return None
 
         if len(data) < cls.LENGTH_MIN:
-            LogUtils.e(cls.TAG, f"Data length {len(data)} < minimum {cls.LENGTH_MIN}")
+            LogUtils.e(cls.TAG, f"data length = {len(data)}, < {cls.LENGTH_MIN}, invalid.")
             return None
 
         try:
             protocol = cls()
 
-            # 解析头部
-            header = WanProtocolHeader()
-            header.sync_header = data[0:3]
-            header.protocol_ver = bytes(data[3:5])
-            header.cmd = bytes(data[5:7])
-            header.session_id = bytes(data[7:11])
-            header.action_type = data[11]
-            header.encrypted = data[12]
-            header.length = ConvertUtils.to_int(data[13:17])
-            header.source = bytes(data[17:25])
-            header.dest = bytes(data[25:33])
+            # Parse header
+            protocol.request_data_head = data[:protocol.head_length]
+            header = memoryview(protocol.request_data_head)
 
-            protocol._header = header
+            sync_header = header[0:3]
+            protocol.protocol_ver = bytes(header[3:5])
+            protocol.cmd = bytes(header[5:7])
+            protocol.session_id = bytes(header[7:11])
+            protocol.action_type = header[11]
+            protocol.encrypted = header[12]
+            protocol.length = ConvertUtils.to_int(header[13:17])
+            protocol.source = bytes(header[17:25])
+            protocol.dest = bytes(header[25:33])
 
-            # 验证长度
-            if len(data) != header.length:
-                LogUtils.e(
-                    cls.TAG,
-                    f"Data length {len(data)} != parsed length {header.length}"
-                )
+            if len(data) != protocol.length:
+                LogUtils.e(cls.TAG, f"data length {len(data)}, parse length {protocol.length}, not equal.")
                 return None
 
-            # 计算数据体长度
-            protocol.body_length = (
-                header.length -
-                header.HEAD_LENGTH -
-                header.TAIL_LENGTH
-            )
+            protocol.body_length = protocol.length - protocol.head_length - protocol.tail_length
 
-            # 解析响应码（如果是响应包）
-            offset = header.HEAD_LENGTH
-            if header.action_type == 1:
+            # Parse response code if action type is 1
+            offset = protocol.head_length
+            if protocol.action_type == 1:
                 protocol.response_code = data[offset]
                 offset += 1
                 protocol.body_length -= 1
 
-            # 解析数据体
-            protocol._request_data_body = data[offset:offset + protocol.body_length]
+            # Parse body
+            protocol.request_data_body = data[offset:offset + protocol.body_length]
             offset += protocol.body_length
 
-            # 解析尾部
-            tail = WanProtocolTail()
-            tail.reserved_bytes = bytes(data[offset:offset + 2])
-            tail.checksum = data[offset + 2]
-            protocol._tail = tail
+            # Parse tail
+            protocol.request_data_tail = data[offset:]
+            protocol.reserved_bytes = protocol.request_data_tail[0:2]
+            protocol.checksum = protocol.request_data_tail[2]
 
-            protocol._request_data = data
+            protocol.request_data = data
             return protocol
 
         except Exception as e:
-            LogUtils.e(cls.TAG, f"Parse error: {e}")
+            LogUtils.e(cls.TAG, f"Parse error: {str(e)}")
             return None
-
-    # endregion
-
-    # region 构建方法
 
     def build_body(self) -> bool:
-        """
-        构建协议体
-
-        子类必须重写此方法。
-
-        Returns:
-            构建是否成功
-        """
-        self._request_data_body = bytes()
-        return True
-
-    def _build_head(self, source: bytes, dest: bytes) -> bool:
-        """
-        构建协议头
-
-        Args:
-            source: 源地址
-            dest: 目的地址
-
-        Returns:
-            构建是否成功
-        """
-        try:
-            self._header.source = source
-            self._header.dest = dest
-            self._header.session_id = ConvertUtils.to_bytes(self.get_session_id())
-            self._header.length = (
-                WanProtocolHeader.HEAD_LENGTH +
-                WanProtocolHeader.TAIL_LENGTH +
-                len(self._request_data_body or b'')
-            )
-            self._request_data_head = self._header.to_bytes()
+        with threading.Lock():
+            self.request_data_body = bytes()
             return True
 
-        except Exception as e:
-            LogUtils.e(self.TAG, f"Build head error: {e}")
-            return False
+    def build_head(self, source: bytes, dest: bytes) -> bool:
+        with threading.Lock():
+            try:
+                self.source = source
+                self.dest = dest
+                self.length = self.head_length + self.tail_length + len(self.request_data_body)
 
-    def _build_tail(self) -> None:
-        """构建协议尾（包含校验和）"""
-        self._tail.checksum = self._calculate_checksum(
-            self._request_data_head,
-            self._request_data_body,
-            self._tail.reserved_bytes
-        )
-        self._request_data_tail = self._tail.to_bytes()
+                buffer = bytearray()
+                buffer.extend(LeelenConst.WAN_SYNC_HEADER)
+                buffer.extend(self.protocol_ver)
+                buffer.extend(self.cmd)
+                buffer.extend(ConvertUtils.to_bytes(self.get_session_id()))
+                buffer.append(self.action_type)
+                buffer.append(self.encrypted)
+                buffer.extend(ConvertUtils.to_bytes(self.length, little_endian=True))
+                buffer.extend(self.source)
+                buffer.extend(self.dest)
 
-    def _calculate_checksum(self, *byte_arrays: bytes) -> int:
-        """
-        计算校验和
+                self.request_data_head = bytes(buffer)
+                return True
 
-        对所有字节数组求和，取反后与0xFF相与。
+            except Exception as e:
+                LogUtils.e(self.TAG, f"Build head error: {str(e)}")
+                return False
 
-        Args:
-            *byte_arrays: 变长字节数组参数
-
-        Returns:
-            校验和字节值
-        """
-        total = sum(
-            byte for array in byte_arrays if array
-            for byte in array
-        )
-        return (-total) & 0xFF
+    def build_tail(self):
+        self.checksum = self._get_check_byte(self.request_data_head,
+                                             self.request_data_body,
+                                             self.reserved_bytes)
+        buffer = bytearray()
+        buffer.extend(self.reserved_bytes)
+        buffer.append(self.checksum)
+        self.request_data_tail = bytes(buffer)
 
     def get_request_data(self, source: bytes, dest: bytes) -> Optional[bytes]:
-        """
-        获取完整的请求数据
+        LogUtils.i(self.TAG, "getRequestData")
 
-        Args:
-            source: 源地址 (8 bytes)
-            dest: 目的地址 (8 bytes)
-
-        Returns:
-            完整的协议数据，失败返回None
-        """
-        LogUtils.i(self.TAG, "Building request data")
-
-        # 构建数据体
         if not self.build_body():
-            LogUtils.e(self.TAG, "Build body failed")
+            LogUtils.e(self.TAG, "buildBody failed.")
             return None
 
-        # 构建头部
-        if not self._build_head(source, dest):
-            LogUtils.e(self.TAG, "Build head failed")
+        if not self.build_head(source, dest):
+            LogUtils.e(self.TAG, "buildHead failed.")
             return None
 
-        # 构建尾部
-        self._build_tail()
+        self.build_tail()
 
-        # 组装数据
         buffer = bytearray()
-        buffer.extend(self._request_data_head)
-        if self._request_data_body:
-            buffer.extend(self._request_data_body)
-        buffer.extend(self._request_data_tail)
-
+        buffer.extend(self.request_data_head)
+        buffer.extend(self.request_data_body)
+        buffer.extend(self.request_data_tail)
         return bytes(buffer)
 
-    # endregion
+    def _get_check_byte(self, *byte_arrays: bytes) -> int:
+        total = 0
+        for byte_array in byte_arrays:
+            total += sum(byte_array)
+        return (-total) & 0xFF
 
-    # region 编码方法
+    def get_cmd(self) -> bytes:
+        return self.cmd
 
-    def encode_password(self, password: str) -> bytes:
+    def get_request_data_body(self) -> bytes:
+        return self.request_data_body
+
+    def get_ascii_password(self, password: str) -> bytes:
         """
-        编码密码
-
-        将密码字符串转换为固定长度(32字节)的ASCII表示。
-        使用反向编码和ISO-8859-1编码。
+        Converts a password string to a fixed-length (32 bytes) ASCII representation.
+        Similar to the Java version but with Pythonic error handling.
 
         Args:
-            password: 密码字符串
+            password: Input password string
 
         Returns:
-            32字节的编码后密码
+            32-byte array with the password encoded in reverse order with ISO-8859-1 encoding,
+            padded if necessary
         """
-        buffer = bytearray(self.PASSWORD_LENGTH)
+        buffer = bytearray(32)  # Equivalent to ByteBuffer.allocate(32)
 
         if not password:
             return bytes(buffer)
@@ -430,57 +200,73 @@ class BaseWanProtocol:
             encoded = password.encode('iso-8859-1')
             pass_len = len(encoded)
 
-            for i in range(self.PASSWORD_LENGTH):
+            for i in range(32):
                 if i < pass_len:
-                    # 反向定位逻辑
-                    pos = (pass_len - 1 + (self.PASSWORD_LENGTH - pass_len) - i)
-                    buffer[i] = encoded[pos] if 0 <= pos < pass_len else self.PADDING_BYTE
+                    # Reverse positioning logic from Java version
+                    pos = (pass_len - 1 + (32 - pass_len) - i)
+                    buffer[i] = encoded[pos] if 0 <= pos < pass_len else 0xFF
                 else:
-                    buffer[i] = self.PADDING_BYTE
+                    buffer[i] = 0xFF  # Default padding
 
         except Exception as e:
-            LogUtils.e(self.TAG, f"Password encoding error: {e}")
+            LogUtils.e(f"Error encoding password: {e}")
+            # Return buffer with default values as in Java version
             return bytes(buffer)
 
         return bytes(buffer)
 
-    def encode_username(self, username: str) -> bytes:
+    def get_ascii_username(self, username: str) -> bytes:
         """
-        编码用户名
-
-        将用户名字符串转换为固定长度(20字节)的ASCII表示。
-        使用反向编码和ISO-8859-1编码。
+        Converts a username string to a fixed-length (20 bytes) ASCII representation.
 
         Args:
-            username: 用户名字符串
+            username: Input username string
 
         Returns:
-            20字节的编码后用户名
+            20-byte array with the username encoded in reverse order with ISO-8859-1 encoding,
+            padded with 0xFF at the beginning if needed
         """
-        buffer = bytearray(self.USERNAME_LENGTH)
+        buffer = bytearray(20)  # Equivalent to ByteBuffer.allocate(20)
 
         if not username:
             return bytes(buffer)
 
         try:
             encoded = username.encode('iso-8859-1')
-            pad_len = self.USERNAME_LENGTH - len(encoded)
+            pad_len = 20 - len(encoded)
 
-            for i in range(self.USERNAME_LENGTH):
+            for i in range(20):
                 if i < pad_len:
-                    buffer[i] = self.PADDING_BYTE
+                    buffer[i] = 0xFF  # Padding
                 else:
-                    # 反向定位逻辑
+                    # Reverse positioning logic from Java version
                     pos = (len(encoded) - 1 + pad_len - i)
-                    buffer[i] = encoded[pos] if 0 <= pos < len(encoded) else self.PADDING_BYTE
+                    buffer[i] = encoded[pos] if 0 <= pos < len(encoded) else 0xFF
 
         except Exception as e:
-            LogUtils.e(self.TAG, f"Username encoding error: {e}")
+            LogUtils.e(f"Error encoding username: {e}")
+            # Return buffer with default values as in Java version
             return bytes(buffer)
 
-    # 保持向后兼容的方法名
-    get_ascii_password = encode_password
-    get_ascii_username = encode_username
-    get_check_byte = _calculate_checksum
+        return bytes(buffer)
 
-    # endregion
+    def get_check_byte(self, *args: bytes) -> int:
+        """
+        Calculates a check byte by summing all bytes in the input arrays
+        and returning the two's complement of the sum (equivalent to 0 - sum).
+
+        Args:
+            *args: Variable number of byte arrays (bytes or bytearray objects)
+
+        Returns:
+            The check byte as an integer (0-255)
+        """
+        total = 0
+
+        for byte_array in args:
+            for byte in byte_array:
+                total += byte
+
+        # Calculate two's complement equivalent to Java's (0 - total)
+        # Using bitwise AND with 0xFF to get unsigned byte value
+        return (0 - total) & 0xFF

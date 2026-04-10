@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict
 
 from ..utils.ConvertUtils import ConvertUtils
@@ -95,7 +96,7 @@ class DeviceStateModel:
                 if high < 0:
                     high += 256
                 temp_val = ((high * 100) + low) / 100.0 - 100.0
-                return round(float(temp_val), 1)
+                return Decimal(temp_val).quantize(Decimal('0.0'), rounding=ROUND_HALF_UP)
 
         return OUT_LINE
 

@@ -156,10 +156,6 @@ class ConnectLan(BaseConnect):
 
         self.connect()
 
-    def on_server_host_empty(self) -> None:
-        """服务器地址为空时的回调"""
-        LogUtils.w(self.tag, "Server host is empty, cannot connect to LAN device")
-
     def add_request(self, data):
         self.send_data(data)
 
@@ -191,36 +187,6 @@ class ConnectLan(BaseConnect):
 
     def set_is_binding_gateway(self, binding):
         self.is_binding_gateway = binding
-
-    def get_connect_state(self):
-        return self.connect_state
-    
-    def get_logon_state(self):
-        return self.logon_state
-    
-    def set_logon_state(self, state: LogonState):
-        self.logon_state = state
-    
-    def set_connect_state(self, state: ConnectState):
-        self.connect_state = state
-    
-    def get_is_binding_gateway(self):
-        return self.is_binding_gateway
-    
-    def get_pre_heartbeat_recv(self):
-        return self.pre_heartbeat_recv
-    
-    def set_pre_heartbeat_recv(self, recv: bool):
-        self.pre_heartbeat_recv = recv
-    
-    def get_pre_heartbeat_send_time(self):
-        return self.pre_heartbeat_send_time
-    
-    def set_pre_heartbeat_send_time(self, time: int):
-        self.pre_heartbeat_send_time = time
-    
-    
-
 
     def send_logon_data(self):
         LogUtils.i(f"{self.tag}: sendLogonData {self.server_host}")

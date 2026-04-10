@@ -2,24 +2,31 @@
   "domain": "leelen",
   "name": "Leelen Home",
   "codeowners": [
-    "@snailll2"
+    "@snailll"
   ],
   "config_flow": true,
   "dependencies": [
     "http",
-    "persistent_notification"
+    "persistent_notification",
+    "ffmpeg",
+    "zeroconf"
   ],
-  "documentation": "https://github.com/snailll2/leelen_home",
+  "documentation": "",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/snailll2/leelen_home/issues",
+  "issue_tracker": "",
   "loggers": [
-    "custom_components.leelen_home"
+    "Leelen Home"
   ],
   "requirements": [
+    "construct>=2.10.56",
+    "paho-mqtt",
+    "numpy",
+    "cryptography",
+    "psutil",
     "aiosqlite>=0.17.0",
     "aiohttp>=3.8.0",
     "aiofiles>=0.7.0"
   ],
-  "version": "1.0.3"
+  "version": "v0.2.4"
 }
