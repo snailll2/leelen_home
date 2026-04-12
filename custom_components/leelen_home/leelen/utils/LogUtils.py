@@ -1,53 +1,33 @@
+"""Logging utilities for Leelen integration."""
 import logging
-import traceback
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class LogUtils:
-    LOG_FILE_PATTERN = "[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] - %(message)s"
-    save_to_file = False
-    use_logcat = True
-    logger = logging.getLogger(__name__)
-    
-
-    @classmethod
-    def init_logger(cls):
-        # 删除所有已存在的Handler
-        for handler in cls.logger.handlers[:]:
-            cls.logger.removeHandler(handler)
-            handler.close()
-        formatter = logging.Formatter(cls.LOG_FILE_PATTERN)
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        cls.logger.addHandler(console_handler)
-        # cls.logger.setLevel(logging.INFO)
-        cls.logger.setLevel(logging.DEBUG)
+    """日志工具类 - 使用 Home Assistant 内置日志系统."""
 
     @staticmethod
-    def d(tag, msg=""):
-        if LogUtils.use_logcat:
-            LogUtils.logger.debug(f"{tag} -> {msg}", stacklevel=2)
+    def d(tag: str, msg: str = "") -> None:
+        """输出 DEBUG 级别日志."""
+        _LOGGER.debug("[%s] %s", tag, msg)
 
     @staticmethod
-    def v(tag, msg=""):
-        if LogUtils.use_logcat:
-            LogUtils.logger.info(f"{tag} -> {msg}", stacklevel=2)
+    def v(tag: str, msg: str = "") -> None:
+        """输出 INFO 级别日志 (verbose)."""
+        _LOGGER.info("[%s] %s", tag, msg)
 
     @staticmethod
-    def e(tag, msg=""):
-        if LogUtils.use_logcat:
-            traceback.print_exc()
-            LogUtils.logger.error(f"{tag} -> {msg}", stacklevel=2)
+    def e(tag: str, msg: str = "") -> None:
+        """输出 ERROR 级别日志."""
+        _LOGGER.error("[%s] %s", tag, msg, exc_info=True)
 
     @staticmethod
-    def w(tag, msg=""):
-        if LogUtils.use_logcat:
-            LogUtils.logger.warning(f"{tag} -> {msg}", stacklevel=2)
+    def w(tag: str, msg: str = "") -> None:
+        """输出 WARNING 级别日志."""
+        _LOGGER.warning("[%s] %s", tag, msg)
 
     @staticmethod
-    def i(tag, msg=""):
-        if LogUtils.use_logcat:
-            LogUtils.logger.info(f"{tag} -> {msg}", stacklevel=2)
-
-
-# 只需调用一次，初始化日志系统
-LogUtils.init_logger()
+    def i(tag: str, msg: str = "") -> None:
+        """输出 INFO 级别日志."""
+        _LOGGER.info("[%s] %s", tag, msg)
