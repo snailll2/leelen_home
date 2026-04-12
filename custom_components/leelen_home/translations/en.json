@@ -1,115 +1,51 @@
 {
   "config": {
     "abort": {
+      "already_configured": "This phone number is already configured",
       "refresh_success": "Device list has been successfully refreshed"
     },
     "error": {
-      "invalid_uid": "Invalid UID"
+      "invalid_phone": "Please enter a valid 11-digit phone number",
+      "sms_rate_limit": "SMS rate limit exceeded, please try again later",
+      "invalid_code": "Invalid verification code",
+      "login_failed": "Login failed"
     },
     "step": {
       "user": {
+        "title": "Leelen Account Login",
+        "description": "Enter your phone number to receive verification code",
         "data": {
-          "uid": "Bemfa UID"
-        },
-        "title": "Bemfa User"
+          "phone": "Phone Number"
+        }
+      },
+      "verify": {
+        "title": "Verification Code Login",
+        "description": "Enter the SMS verification code",
+        "data": {
+          "code": "Verification Code"
+        }
       }
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Operations",
+        "title": "Device Management",
         "menu_options": {
-          "create_sync": "Create sync",
-          "modify_sync": "Modify sync",
-          "destroy_sync": "Destroy sync(s)"
+          "refresh": "Sync Devices",
+          "cancel": "Cancel"
         }
       },
+      "refresh": {
+        "title": "Sync Devices",
+        "description": "Sync devices from Leelen Cloud to Home Assistant"
+      },
       "refresh_result": {
-        "title": "Device refresh completed",
+        "title": "Sync Completed",
         "description": "Total devices found: {total}\nAdded devices: {added}\nRemoved devices: {removed}\nRemoved entities: {removed_entities}"
       },
       "cancel": {
-        "title": "Operation canceled"
-      },
-      "create_sync": {
-        "title": "Create sync",
-        "description": "Select an entity to create sync."
-      },
-      "modify_sync": {
-        "title": "Modify a sync",
-        "description": "Select a sync to edit."
-      },
-      "sync_config_sensor": {
-        "title": "Configuation",
-        "description": "Configuate a hass-to-bemfa sensor sync.",
-        "data": {
-          "name": "Name",
-          "temperature": "Select a temperature sensor",
-          "humidity": "Select a humidity sensor",
-          "illuminance": "Select an illuminance sensor",
-          "pm25": "Select a pm25 sensor"
-        }
-      },
-      "sync_config_binary_sensor": {
-        "title": "Configuation",
-        "description": "Configuate a hass-to-bemfa binary sensor sync.",
-        "data": {
-          "name": "Name"
-        }
-      },
-      "sync_config_climate": {
-        "title": "Configuation",
-        "description": "Configuate a hass-to-bemfa climate sync.",
-        "data": {
-          "name": "Name",
-          "fan_speed_0_value": "Fan speed auto",
-          "fan_speed_1_value": "Fan speed 1",
-          "fan_speed_2_value": "Fan speed 2",
-          "fan_speed_3_value": "Fan speed 3",
-          "fan_speed_4_value": "Fan speed 4",
-          "fan_speed_5_value": "Fan speed 5",
-          "swing_off_value": "Swing off",
-          "swing_horizontal_value": "Swing horizontal",
-          "swing_vertical_value": "Swing vertical",
-          "swing_both_value": "Swing both"
-        }
-      },
-      "sync_config_cover": {
-        "title": "Configuation",
-        "description": "Configuate a hass-to-bemfa cover sync.",
-        "data": {
-          "name": "Name"
-        }
-      },
-      "sync_config_fan": {
-        "title": "Configuation",
-        "description": "Configuate a hass-to-bemfa fan sync.",
-        "data": {
-          "name": "Name"
-        }
-      },
-      "sync_config_light": {
-        "title": "Configuation",
-        "description": "Configuate a hass-to-bemfa light sync.",
-        "data": {
-          "name": "Name"
-        }
-      },
-      "sync_config_switch": {
-        "title": "Configuation",
-        "description": "Configuate a hass-to-bemfa switch sync.",
-        "data": {
-          "name": "Name"
-        }
-      },
-      "destroy_sync": {
-        "title": "Destroy sync(s)",
-        "description": "Select sync(s) to destroy."
-      },
-      "empty": {
-        "title": "Empty",
-        "description": "No syncs found."
+        "title": "Canceled"
       }
     }
   }
