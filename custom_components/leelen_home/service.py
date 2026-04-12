@@ -1,4 +1,4 @@
-"""Support for bemfa service."""
+"""Support for Leelen service."""
 from __future__ import annotations
 
 from types import MappingProxyType
