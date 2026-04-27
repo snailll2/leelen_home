@@ -128,7 +128,7 @@ class BaseWanProtocol:
                 buffer.extend(ConvertUtils.to_bytes(self.get_session_id()))
                 buffer.append(self.action_type)
                 buffer.append(self.encrypted)
-                buffer.extend(ConvertUtils.to_bytes(self.length, little_endian=True))
+                buffer.extend(ConvertUtils.to_bytes(self.length))
                 buffer.extend(self.source)
                 buffer.extend(self.dest)
 

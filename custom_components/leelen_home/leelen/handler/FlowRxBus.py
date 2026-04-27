@@ -6,7 +6,6 @@ from ..common.CommonModel import CommonModel
 from ..handler.DeviceStatusEvent import DeviceStatusEvent
 from ..utils.ConvertUtils import ConvertUtils
 from ..utils.LogUtils import LogUtils
-from ... import DOMAIN
 from ..common.LeelenType import *
 
 class FlowRxBus:
@@ -67,6 +66,7 @@ class FlowRxBus:
             # await self._hass.services.async_call(
             #     domain=DOMAIN, service=service, service_data=service_data
             # )
+            from ... import DOMAIN
             unique_id = f"leelen_logic_addr_{logic_address}"
             entity = self._hass.data[DOMAIN]["entities"].get(unique_id)
             state = CommonModel.get_instance().get_cur_state(logic_address, event.function_id, event.state)

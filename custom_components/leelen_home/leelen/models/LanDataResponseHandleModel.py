@@ -20,7 +20,7 @@ from ..protocols.BaseLanProtocol import BaseLanProtocol
 from ..protocols.DeviceStatusLanProtocol import DeviceStatusLanProtocol
 from ..utils.ConvertUtils import ConvertUtils
 from ..utils.LogUtils import LogUtils
-from ... import HttpApi
+
 
 
 class LanDataResponseHandleModel:
@@ -240,6 +240,7 @@ class LanDataResponseHandleModel:
 
     def _handle_sync_complete(self, config_ack: Dict[str, Any]) -> None:
         """处理完整配置同步"""
+        from ..api.HttpApi import HttpApi
         LogUtils.d("Configuration update complete, 开始获取设备状态信息")
         devices = asyncio.run(HttpApi.get_instance().query_devices("/Users/snail/Downloads/dump.db"))
         for device in devices:

@@ -311,7 +311,7 @@ class HttpApi:
         async with aiosqlite.connect(db_path) as db:
             db.row_factory = aiosqlite.Row  # ✅ 设置 row_factory 才能用 dict(row)
             cursor = await db.execute(
-                "select val from dev_tbl  a , property_tbl b where a.dev_addr =b.addr and b.property_id=163;")
+            "select val from dev_tbl  a , property_tbl b where a.dev_addr =b.addr and b.property_id=163 and a.dev_type = 776;")
             all_ips = await cursor.fetchall()
             LogUtils.d(f"✅ get gateway ip {all_ips}")
             for row in all_ips:

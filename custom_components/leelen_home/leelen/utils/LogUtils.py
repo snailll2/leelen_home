@@ -2,8 +2,7 @@
 import logging
 
 _LOGGER = logging.getLogger(__name__)
-
-
+# logging.basicConfig(level=logging.DEBUG)
 class LogUtils:
     """日志工具类 - 使用 Home Assistant 内置日志系统."""
 

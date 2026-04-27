@@ -78,9 +78,10 @@ class LeelenIntegrationConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 result = await HttpApi.get_instance(self.hass).code_login(code)
                 if result:
                     result[CONF_PHONE] = self._phone
+                    device_addr = result.get(CONF_DEVICE_ADDR)
                     _LOGGER.info("登录成功: %s", self._phone)
                     return self.async_create_entry(
-                        title=self._phone,
+                        title=f"网关：{device_addr}({self._phone})",
                         data=result,
                     )
                 errors["code"] = "invalid_code"

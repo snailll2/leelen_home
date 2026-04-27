@@ -23,7 +23,6 @@ class HeartbeatService:
         self.connect_wan = None
         self.no_intent = False
         self.hass = hass
-        # LogUtils.logger = logging.getLogger(self.TAG)
 
     @classmethod
     def get_instance(cls) -> 'HeartbeatService':
@@ -68,30 +67,30 @@ class HeartbeatService:
             self.connect_lan.set_connect_state(ConnectState.NONE)
             self.connect_lan.connect_lan()
 
-    # def wan_conn_close(self):
-    #     LogUtils.logger.info("wanConnClose")
-    #     if self.connect_wan:
-    #         self.connect_wan.close()
-    #         self.connect_wan = None
+    def wan_conn_close(self):
+        LogUtils.i("wanConnClose")
+        if self.connect_wan:
+            self.connect_wan.close()
+            self.connect_wan = None
 
-    # def wan_conn_open(self):
-    #     from .ConnectWan import ConnectWan
-    #     LogUtils.logger.info("wanConnOpen")
-    #     if not self.connect_wan:
-    #         self.connect_wan = ConnectWan.get_instance()
-    #     if self.connect_wan:
-    #         self.connect_wan.close()
-    #         self.connect_wan.open()
+    def wan_conn_open(self):
+        from .ConnectWan import ConnectWan
+        LogUtils.i("wanConnOpen")
+        if not self.connect_wan:
+            self.connect_wan = ConnectWan.get_instance()
+        if self.connect_wan:
+            self.connect_wan.close()
+            self.connect_wan.open()
 
-    # def wan_conn_reopen(self):
-    #     LogUtils.logger.info("wanConnReOpen")
-    #     if not self.connect_wan:
-    #         self.wan_conn_open()
-    #     else:
-    #         if User.get_instance().is_project_account:
-    #             return
-    #         self.connect_wan.set_connect_state(ConnectState.NONE)
-    #         self.connect_wan.open()
+    def wan_conn_reopen(self):
+        LogUtils.i("wanConnReOpen")
+        if not self.connect_wan:
+            self.wan_conn_open()
+        else:
+            if User.get_instance().is_project_account:
+                return
+            self.connect_wan.set_connect_state(ConnectState.NONE)
+            self.connect_wan.open()
 
     def is_service_destroy(self):
         return self.is_service_destroy
