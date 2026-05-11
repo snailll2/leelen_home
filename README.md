@@ -4,6 +4,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0-blue.svg)](https://www.home-assistant.io/)
 
 Home Assistant integration for Leelen (立林) smart home devices.
+Only adapts to IoT 2.0 gateways。
 
 ## Features
 
