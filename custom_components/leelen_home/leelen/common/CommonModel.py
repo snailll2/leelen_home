@@ -1,5 +1,6 @@
 from threading import Lock
 from typing import Optional
+import logging
 
 from ..utils.LogUtils import LogUtils
 from ..common import FunctionValue
@@ -9,6 +10,8 @@ from ..states.LinCenterAcState import LinCenterAcState
 from ..states.LinCurtainMotorState import LinCurtainMotorState
 from ..states.LinSensorState import LinSensorState
 from ..utils.ConvertUtils import ConvertUtils
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class CommonModel:
@@ -59,18 +62,6 @@ class CommonModel:
         if control_type in {2, 3, 571, 773, 774, 775, 778, 779, 780}:
             return self.get_switch_control_value(state)
 
-        # if control_type == 49:
-        #     return self.get_dimmer_control_value(state)
-        #
-        # if control_type == 150:
-        #     return self.get_floor_heating_control_value(state)
-        #
-        # if control_type == 152:
-        #     return self.get_fresh_air_module_control_value(state)
-        #
-        # if control_type == 259:
-        #     return self.get_arm_control_value(state)
-
         if control_type in {146, 518, 561, 658, 662, 664}:
             return self.get_center_ac_control_value(state, mode)
 
@@ -80,27 +71,8 @@ class CommonModel:
         if control_type in {570, 573, 574, 782, 783}:
             return self.get_curtain_motor_control_value(state)
 
-        # if control_type == 147:
-        #     return self.get_bgm_control_value(state)
-        #
-        # if control_type == 148:
-        #     return self.get_fresh_air_control_value(state)
-        #
-        # if control_type in {566, 567, 568, 569}:
-        #     return self.get_rgb_light_control_value(state)
-
         # 默认处理逻辑
         return self.get_switch_control_value(state)
-
-    # def get_control_value(self, service_type: int, state, sub_type: int) -> bytes | None:
-    #     if service_type in {2, 3, 49, 152, 514, 515, 664}:
-    #         return self.get_switch_control_value(state)
-    #     elif service_type in {658, 146, 782, 783}:
-    #         return self.get_center_ac_control_value(state, sub_type)
-    #     elif service_type in {58, 59, 570, 571, 573, 574}:
-    #         return self.get_curtain_control_value(state)
-    #     else:
-    #         return self.get_switch_control_value(state)
 
     def get_switch_control_value(self, state) -> bytes | None:
         power_state = state.get_power_state()
@@ -232,7 +204,7 @@ class CommonModel:
             sensor_state = LinSensorState()
             sensor_state.set_value(value)
             return sensor_state
-    
+
     def get_cur_sensor_power(self, device_addr, service_type, state_bytes):
         with self._lock:
             value = DeviceStateModel.get_instance().get_environment_state_val(service_type, device_addr, device_addr, state_bytes)
@@ -275,6 +247,40 @@ class CommonModel:
             result.set_progress(progress)
             return result
 
+    def get_cur_fresh_air_module_state(self, service_type: int, device_addr: int, state_bytes):
+        """解析新风执行器状态（49185/774/780）"""
+        with self._lock:
+            power_state = 0
+            if state_bytes and len(state_bytes) > 0:
+                # 直接取第一个字节作为状态值，1=低风，2=中风，3=高风，0xFE=自动
+                power_state = state_bytes[0]
+
+            # 使用 LinCenterAcState 承载状态，因为新风和空调共用部分字段
+            fresh_air_state = LinCenterAcState()
+            fresh_air_state.set_power_state(power_state)  # 关键：将字节值赋给 power_state
+            fresh_air_state.set_service_type(service_type)
+            fresh_air_state.set_service_address(device_addr)
+            # 把原始字节也保存一份，供 update_state 回退逻辑使用
+            fresh_air_state.state = state_bytes
+            return fresh_air_state
+
+    def get_cur_floor_heating_state(self, device_addr, service_type, state_bytes):
+        """解析地暖执行器状态（51234/51235/775/779）"""
+        with self._lock:
+            power_state = 0
+            _LOGGER.info("!!! CommonModel floor heating: addr=%s, service_type=%s, raw_bytes=%s",
+                          device_addr, service_type, state_bytes.hex() if state_bytes else None)
+            if state_bytes and len(state_bytes) >= 2:
+                # 第二个字节的 bit0 为开关状态：1=开，0=关
+                power_state = state_bytes[1] & 0x01
+
+            heating_state = LinCenterAcState()
+            heating_state.set_power_state(power_state)
+            heating_state.set_service_type(service_type)
+            heating_state.set_service_address(device_addr)
+            heating_state.state = state_bytes
+            return heating_state
+
     def get_cur_state(self, device_addr, service_type, state_bytes):
         # 高优先级直接返回的情况
 
@@ -285,7 +291,7 @@ class CommonModel:
             return self.get_cur_sensor_state(device_addr, service_type, state_bytes)
 
         if service_type in (2, 3):
-            return self.get_cur_switch_state(device_addr, service_type)
+            return self.get_cur_switch_state(device_addr, service_type, state_bytes)
 
         # 分类处理
         if service_type in {58, 59, 571}:
@@ -300,8 +306,8 @@ class CommonModel:
         if service_type in {782, 146, 658, 773, 778, 55297}:
             return self.get_cur_center_ac_state(service_type, device_addr, state_bytes)
 
-        if service_type in {783, 152, 664, 774, 780}:
-            return self.get_cur_fresh_air_module_state(service_type, device_addr)
+        if service_type in {783, 152, 664, 774, 780, 49185}:
+            return self.get_cur_fresh_air_module_state(service_type, device_addr, state_bytes)
 
         if service_type in {49, 561}:
             return self.get_cur_dimmer_state(service_type, device_addr)
@@ -309,15 +315,15 @@ class CommonModel:
         if service_type == 148:
             return self.get_cur_ventilation_system_state(device_addr)
 
-        if service_type in {150, 662, 775, 779}:
-            return self.get_cur_floor_heating_state(device_addr, service_type)
+        # 地暖分支：包含原有类型及 51234, 51235
+        if service_type in {150, 662, 775, 779, 51234, 51235}:
+            return self.get_cur_floor_heating_state(device_addr, service_type, state_bytes)
 
         if service_type == 158:
             return self.get_cur_ladder_state(device_addr)
-        
+
         if service_type == 20517:
             return self.get_cur_sensor_power(device_addr, service_type, state_bytes)
-
 
         if service_type == 518:
             return self.get_cur_smart_socket_state(device_addr)

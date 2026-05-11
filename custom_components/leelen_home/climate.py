@@ -30,13 +30,38 @@ from .leelen.states.LinSensorState import LinSensorState
 _LOGGER = logging.getLogger(__name__)
 
 
+SUPPORTED_LOGIC_TYPES = [
+    # 中心空调 146
+    LogicDeviceType.TYPE_CENTER_AIR_CONDITIONER,
+    # 中心空调 658
+    LogicDeviceType.ZIGBEE_CENTER_AC,
+    # 中心空调控制 770
+    LogicDeviceType.TYPE_AC_CONTROL,
+
+
+    # 地板加热器 772
+    LogicDeviceType.TYPE_FLOOR_CONTROL,
+    # 地板加热器 775
+    LogicDeviceType.TYPE_FLOOR_ACTUATOR,
+    # 地板加热器 776
+    LogicDeviceType.TYPE_FLOOR,
+
+    # 新风 774
+    LogicDeviceType.TYPE_FRESH_ACTUATOR,
+    # 新风 771
+    LogicDeviceType.TYPE_FRESH_CONTROL,
+    # 新风 777
+    LogicDeviceType.TYPE_AC_FRESH,
+
+]
+
 async def setup_devices_from_db(hass, config_entry, async_add_entities):
     device_list: list = hass.data[DOMAIN]['devices'].get(config_entry.entry_id) or []
     # 注册设备
     entities = []
     for device_info in device_list:
         for logic_srv in device_info.get("logic_srv", []):
-            if logic_srv.get("logic_type") in [LogicDeviceType.TYPE_CENTER_AIR_CONDITIONER]:
+            if logic_srv.get("logic_type") in SUPPORTED_LOGIC_TYPES:
                 entity = Climate(logic_srv.get("logic_addr"),
                                  logic_srv.get("dev_addr"),
                                  logic_srv.get("logic_name"),
