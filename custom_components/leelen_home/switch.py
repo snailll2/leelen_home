@@ -179,9 +179,10 @@ class VSwitch(Switch):
         return self._linked_entity_id
 
     async def _sync_linked_entity_state(self, target_state: bool) -> None:
-        LogUtils.d(f"💡 {self._name} sync linked entity {self._linked_entity_id} state to {target_state}")
         if not self._linked_entity_id or self._is_syncing:
             return
+        LogUtils.d(f"💡 {self._name} sync linked entity {self._linked_entity_id} state to {target_state}")
+
         self._is_syncing = True
         try:
             state = self.hass.states.get(self._linked_entity_id)
@@ -190,19 +191,20 @@ class VSwitch(Switch):
                     "homeassistant",
                     "turn_on" if target_state else "turn_off",
                     {"entity_id": self._linked_entity_id},
-                    blocking=True
+                    blocking=False
                 )
             self._last_sync_time = time.time()
         finally:
             self._is_syncing = False
 
     async def _linked_entity_state_changed(self, entity_id: str, from_state: State, to_state: State) -> None:
-        LogUtils.d(f"💡 {self._name} linked entity state changed {entity_id} from {from_state} to {to_state}")
         if self._is_syncing or not to_state:
             return
+        LogUtils.d(f"💡 {self._name} linked entity state changed {entity_id} from {from_state} to {to_state}")
+
         if entity_id != self._linked_entity_id:
             return
-        if time.time() - self._last_sync_time < 1.0:
+        if time.time() - self._last_sync_time < 2.0:
             LogUtils.d(f"💡 {self._name} ignoring linked entity change (just synced)")
             return
         new_state = to_state.state in ("on", "open", "locked")
@@ -264,5 +266,8 @@ class VSwitch(Switch):
         LogUtils.d(f"💡 {self._name} update {state}")
         if state.get_service_type() in [FunctionType.FUNCTION_ARM, FunctionType.FUNCTION_ARM_CONDITION]:
             # self._prop_on = state.power_state == 1
-            self._prop_on = not self._prop_on
+            self._prop_on = False if self._prop_on else True
+            # await self.async_toggle()
         self.async_write_ha_state()
+        if not self._is_syncing:
+            await self._sync_linked_entity_state(self._prop_on)

@@ -273,7 +273,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 linked_entities = self._config.get(OPTIONS_LINKED_ENTITIES, {})
                 linked_entities[self._selected_vswitch] = linked_entity
                 self._config[OPTIONS_LINKED_ENTITIES] = linked_entities
-                return self.async_create_entry(title="", options={OPTIONS_CONFIG: self._config})
+                return self.async_create_entry(title="", data={OPTIONS_CONFIG: self._config})
             return await self.async_step_select_linked()
 
         vswitch_info = self._selected_vswitch
@@ -447,7 +447,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 linked_entities = self._config.get(OPTIONS_LINKED_ENTITIES, {})
                 linked_entities[self._selected_vswitch] = linked_entity
                 self._config[OPTIONS_LINKED_ENTITIES] = linked_entities
-                return self.async_create_entry(title="", options={OPTIONS_CONFIG: self._config})
+                return self.async_create_entry(title="", data={OPTIONS_CONFIG: self._config})
 
         vswitch_info = self._selected_vswitch
         vswitch_entity = entity_registry.async_get(self._selected_vswitch)
@@ -478,7 +478,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 if self._selected_vswitch in linked_entities:
                     del linked_entities[self._selected_vswitch]
                     self._config[OPTIONS_LINKED_ENTITIES] = linked_entities
-                return self.async_create_entry(title="", options={OPTIONS_CONFIG: self._config})
+                return self.async_create_entry(title="", data={OPTIONS_CONFIG: self._config})
             return await self.async_step_manage_links()
 
         entity_registry = er.async_get(self.hass)
