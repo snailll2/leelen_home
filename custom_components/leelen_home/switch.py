@@ -4,20 +4,21 @@
 # Light entities for Xiaomi Home.
 # """
 from __future__ import annotations
-
+import time
 import logging
 from typing import Any, Optional
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_state_change
 
 from . import LogUtils
-from .const import DOMAIN
+from .const import DOMAIN, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES
 from .leelen.common.LeelenType import *
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinBaseState import LinBaseState
@@ -31,18 +32,12 @@ _LOGGER = logging.getLogger(__name__)
 
 async def setup_devices_from_db(hass, config_entry, async_add_entities):
     device_list: list = hass.data[DOMAIN]['devices'].get(config_entry.entry_id) or []
-    # 注册设备
     entities = []
     device_registry = dr.async_get(hass)
+    linked_entities = config_entry.options.get(OPTIONS_CONFIG, {}).get(OPTIONS_LINKED_ENTITIES, {})
+    LogUtils.d(f"switch linked_entities: {linked_entities}")
+
     for device_info in device_list:
-        # device_id, name, model = device_info
-        # device_registry.async_get_or_create(
-        #     config_entry_id=config_entry.entry_id,
-        #     identifiers={("LEELEN_HOME", device_info.get("dev_addr"))},
-        #     manufacturer="LEELEN",
-        #     name=device_info.get("dev_name"),
-        #     model=device_info.get("dev_type"),
-        # )
         for logic_srv in device_info.get("logic_srv", []):
             if logic_srv.get("logic_type") in [LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET, 572]:
                 entity = Switch(logic_srv.get("logic_addr"),
@@ -52,9 +47,22 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                                 config_entry)
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
                 entities.append(entity)
-        # 为每个设备创建 Light 实体
-    # 添加实体到 HA
+            if logic_srv.get("logic_type") in [LogicDeviceType.ARM]:
+                entity = VSwitch(logic_srv.get("logic_addr"),
+                                logic_srv.get("dev_addr"),
+                                logic_srv.get("logic_name"),
+                                device_info.get("dev_name"),
+                                config_entry)
+                LogUtils.d(f"vswitch entity: {entity} {entity.unique_id} {linked_entities}")
+                if entity.unique_id in linked_entities:
+                    entity.set_linked_entity(linked_entities[entity.unique_id])
+                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
+                entities.append(entity)
     async_add_entities(entities)
+
+    for entity in entities:
+        if isinstance(entity, VSwitch) and entity.get_linked_entity():
+            entity.register_state_listener()
 
 
 async def async_setup_entry(
@@ -154,4 +162,106 @@ class Switch(SwitchEntity):
         if state.get_service_type() == FunctionType.FUNCTION_POWER:
             self._power_usage = state.get_power()
         
+        self.async_write_ha_state()
+
+
+
+class VSwitch(Switch):
+    _linked_entity_id: Optional[str] = None
+    _is_syncing: bool = False
+    _state_unsub: Optional[callable] = None
+    _last_sync_time: float = 0.0
+
+    def set_linked_entity(self, entity_id: str) -> None:
+        self._linked_entity_id = entity_id
+
+    def get_linked_entity(self) -> Optional[str]:
+        return self._linked_entity_id
+
+    async def _sync_linked_entity_state(self, target_state: bool) -> None:
+        LogUtils.d(f"💡 {self._name} sync linked entity {self._linked_entity_id} state to {target_state}")
+        if not self._linked_entity_id or self._is_syncing:
+            return
+        self._is_syncing = True
+        try:
+            state = self.hass.states.get(self._linked_entity_id)
+            if state and state.state != ("on" if target_state else "off"):
+                await self.hass.services.async_call(
+                    "homeassistant",
+                    "turn_on" if target_state else "turn_off",
+                    {"entity_id": self._linked_entity_id},
+                    blocking=True
+                )
+            self._last_sync_time = time.time()
+        finally:
+            self._is_syncing = False
+
+    async def _linked_entity_state_changed(self, entity_id: str, from_state: State, to_state: State) -> None:
+        LogUtils.d(f"💡 {self._name} linked entity state changed {entity_id} from {from_state} to {to_state}")
+        if self._is_syncing or not to_state:
+            return
+        if entity_id != self._linked_entity_id:
+            return
+        if time.time() - self._last_sync_time < 1.0:
+            LogUtils.d(f"💡 {self._name} ignoring linked entity change (just synced)")
+            return
+        new_state = to_state.state in ("on", "open", "locked")
+        if new_state == self._prop_on:
+            return
+        self._is_syncing = True
+        try:
+            if new_state:
+                ControlModel.get_instance().device_control(self._logic_addr, FunctionType.FUNCTION_ARM,
+                                                           bytes([1,0,0,0 ]))
+                self._prop_on = True
+            else:
+                ControlModel.get_instance().device_control(self._logic_addr, FunctionType.FUNCTION_ARM_CONDITION,
+                                                           bytes([2,0,0,0 ]))
+                self._prop_on = False
+            self.async_write_ha_state()
+        finally:
+            self._is_syncing = False
+
+    def register_state_listener(self) -> None:
+        if self._linked_entity_id and not self._state_unsub:
+            self._state_unsub = async_track_state_change(
+                self.hass,
+                self._linked_entity_id,
+                self._linked_entity_state_changed
+            )
+
+    def unregister_state_listener(self) -> None:
+        if self._state_unsub:
+            self._state_unsub()
+            self._state_unsub = None
+
+    @property
+    def extra_state_attributes(self):
+        """Return entity specific state attributes."""
+        attrs = super().extra_state_attributes
+        if self._linked_entity_id:
+            attrs["linked_entity"] = self._linked_entity_id
+        return attrs
+
+    async def async_turn_on(self, **kwargs) -> None:
+        ControlModel.get_instance().device_control(self._logic_addr, FunctionType.FUNCTION_ARM ,
+                                                   bytes([1,0,0,0 ]))
+        self._prop_on = True
+        self.async_write_ha_state()
+        await self._sync_linked_entity_state(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        ControlModel.get_instance().device_control(self._logic_addr, FunctionType.FUNCTION_ARM_CONDITION ,
+                                                   bytes([2,0,0,0 ]))
+        self._prop_on = False
+        self.async_write_ha_state()
+        await self._sync_linked_entity_state(False)
+
+    async def update_state(self, state: LinBaseState):
+        if self._is_syncing:
+            LogUtils.d(f"💡 {self._name} update skipped during sync")
+            return
+        LogUtils.d(f"💡 {self._name} update {state}")
+        if state.get_service_type() in [FunctionType.FUNCTION_ARM, FunctionType.FUNCTION_ARM_CONDITION]:
+            self._prop_on = state.power_state == 1
         self.async_write_ha_state()

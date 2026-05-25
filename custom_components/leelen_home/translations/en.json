@@ -33,6 +33,8 @@
         "title": "Device Management",
         "menu_options": {
           "refresh": "Sync Devices",
+          "link": "Link Entities",
+          "manage_links": "Manage Links", 
           "cancel": "Cancel"
         }
       },
@@ -40,6 +42,47 @@
         "title": "Sync Devices",
         "description": "Sync devices from Leelen Cloud to Home Assistant"
       },
+      "link": {
+        "title": "Link Entities",
+        "description": "Select a VSwitch device to link"
+      },
+      "link_no_vswitch": {
+        "title": "Link Entities",
+        "description": "No VSwitch devices found"
+      },
+      "select_linked": {
+        "title": "Select Linked Entity",
+        "description": "Selected: {vswitch_name}\nSelect HA entity to link"
+      },
+      "select_linked_no_entity": {
+        "title": "Select Linked Entity",
+        "description": "No entities found to link"
+      },
+      "manage_links": {
+        "title": "Manage Links",
+        "description": "Total {count} linked entities\nSelect link to manage"
+      },
+      "manage_links_empty": {
+        "title": "Manage Links",
+        "description": "No linked entities yet\n\nPlease add links first"
+      },
+      "link_actions": {
+        "title": "Link Actions",
+        "description": "VSwitch: {vswitch_name}\nCurrent link: {linked_name}"
+      },
+      "modify_linked": {
+        "title": "Modify Link",
+        "description": "VSwitch: {vswitch_name}\nSelect new HA entity to link"
+      },
+      "modify_linked_no_entity": {
+        "title": "Modify Link",
+        "description": "No entities found to link"
+      },
+      "delete_confirm": {
+        "title": "Confirm Delete",
+        "description": "Confirm delete this link?\n\nVSwitch: {vswitch_name}\nLinked entity: {linked_name}"
+      },
+      
       "refresh_result": {
         "title": "Sync Completed",
         "description": "Total devices found: {total}\nAdded devices: {added}\nRemoved devices: {removed}\nRemoved entities: {removed_entities}"

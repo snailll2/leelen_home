@@ -280,12 +280,34 @@ class CommonModel:
             heating_state.set_service_address(device_addr)
             heating_state.state = state_bytes
             return heating_state
+    
+    def get_v_switch_state(self, device_addr, service_type, state_bytes):
+        with self._lock:
+            power_state = 0
+            # state_bytes 定义
+            # \x01\x00\x00\x00 为开
+            # \x02\x00\x00\x00 为关
+            if state_bytes and len(state_bytes) == 4:
+                power_state = 1 if state_bytes[0]  == 0x01 else 0
+            LogUtils.d(f"VSwitch: {device_addr}, {service_type}, {state_bytes.hex() if state_bytes else None}, power_state={power_state},state_bytes[3] = {state_bytes[3]},state_bytes[2] = {state_bytes[2]},state_bytes[1] = {state_bytes[1]},state_bytes[0] = {state_bytes[0]}")
+            
+            switch_state = LinBaseState()
+            switch_state.set_power_state(power_state)
+            switch_state.set_service_type(service_type)
+            switch_state.set_service_address(device_addr)
+            switch_state.state = state_bytes
+            return switch_state
+    
+
 
     def get_cur_state(self, device_addr, service_type, state_bytes):
         # 高优先级直接返回的情况
 
         if service_type in {18442, 16395, 18455, 18479, 18478, 18480, 18477, 18304}:
             return self.get_cur_sensor_state(device_addr, service_type, state_bytes)
+        # 55334 FUNCTION_ARM , 16267  FUNCTION_ARM_CONDITION 为虚拟开关
+        if service_type in {55334, 16267}:
+            return self.get_v_switch_state(device_addr, service_type, state_bytes)
 
         if service_type in {22529}:
             return self.get_cur_sensor_state(device_addr, service_type, state_bytes)

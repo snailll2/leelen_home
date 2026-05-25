@@ -289,8 +289,8 @@ class HttpApi:
                 device["logic_srv"] = []
                 device["all_property"] = []
                 dev_addr, dev_type, dev_name, sn = row
-                cursor2 = await db.execute(
-                    f"select * from logic_srv_tbl where dev_addr = '{dev_addr}' and logic_type !=0  and srv_type !=0 and display=1 ;")
+                # cursor2 = await db.execute( f"select * from logic_srv_tbl where dev_addr = '{dev_addr}' and logic_type !=0  and srv_type !=0 and display=1 ;")
+                cursor2 = await db.execute( f"select * from logic_srv_tbl where dev_addr = '{dev_addr}' and logic_type !=0  and srv_type !=0 ;")
                 all_logic_srv = await cursor2.fetchall()
                 for row2 in all_logic_srv:
                     logic_srv = dict(row2)

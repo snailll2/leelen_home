@@ -33,6 +33,8 @@
         "title": "设备管理",
         "menu_options": {
           "refresh": "同步设备",
+          "link": "关联实体",
+          "manage_links": "管理关联",
           "cancel": "取消"
         }
       },
@@ -40,6 +42,47 @@
         "title": "同步设备",
         "description": "从立林云同步设备到 Home Assistant"
       },
+      "link": {
+        "title": "关联实体",
+        "description": "选择一个 VSwitch 设备进行关联"
+      },
+      "link_no_vswitch": {
+        "title": "关联实体",
+        "description": "未找到 VSwitch 设备"
+      },
+      "select_linked": {
+        "title": "选择关联实体",
+        "description": "已选择: {vswitch_name}\n选择要关联的 HA 实体"
+      },
+      "select_linked_no_entity": {
+        "title": "选择关联实体",
+        "description": "未找到可关联的实体"
+      },
+      "manage_links": {
+        "title": "管理关联",
+        "description": "当前共有 {count} 个关联实体\n选择要操作的关联"
+      },
+      "manage_links_empty": {
+        "title": "管理关联",
+        "description": "暂无已关联的实体\n\n请先添加关联"
+      },
+      "link_actions": {
+        "title": "关联操作",
+        "description": "VSwitch: {vswitch_name}\n当前关联: {linked_name}"
+      },
+      "modify_linked": {
+        "title": "修改关联",
+        "description": "VSwitch: {vswitch_name}\n选择新的 HA 实体进行关联"
+      },
+      "modify_linked_no_entity": {
+        "title": "修改关联",
+        "description": "未找到可关联的实体"
+      },
+      "delete_confirm": {
+        "title": "确认删除",
+        "description": "确认删除此关联？\n\nVSwitch: {vswitch_name}\n关联实体: {linked_name}"
+      },
+
 
       "refresh_result": {
         "title": "同步完成",

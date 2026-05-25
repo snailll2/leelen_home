@@ -34,7 +34,7 @@ CONF_GATEWAY_IP: Final = "gateway_ip"
 
 OPTIONS_CONFIG: Final = "config"
 OPTIONS_SELECT: Final = "select"
-
+OPTIONS_LINKED_ENTITIES: Final = "linked_entities"
 FAN_MODE_SPEED_MAP = {
     FAN_LOW: 1,
     FAN_MEDIUM: 2,
