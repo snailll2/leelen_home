@@ -34,7 +34,7 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
     device_list: list = hass.data[DOMAIN]['devices'].get(config_entry.entry_id) or []
     entities = []
     device_registry = dr.async_get(hass)
-    linked_entities = config_entry.options.get(OPTIONS_CONFIG, {}).get(OPTIONS_LINKED_ENTITIES, {})
+    linked_entities = config_entry.options.get(OPTIONS_CONFIG, config_entry.data.get(OPTIONS_CONFIG, {})).get(OPTIONS_LINKED_ENTITIES, {})
     LogUtils.d(f"switch linked_entities: {linked_entities}")
 
     for device_info in device_list:
@@ -263,5 +263,6 @@ class VSwitch(Switch):
             return
         LogUtils.d(f"💡 {self._name} update {state}")
         if state.get_service_type() in [FunctionType.FUNCTION_ARM, FunctionType.FUNCTION_ARM_CONDITION]:
-            self._prop_on = state.power_state == 1
+            # self._prop_on = state.power_state == 1
+            self._prop_on = not self._prop_on
         self.async_write_ha_state()

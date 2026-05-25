@@ -111,7 +111,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Initialize options flow."""
         self._entry_id = config_entry.entry_id
         self._config_entry = config_entry
-        self._config = dict(config_entry.options.get(OPTIONS_CONFIG, {}))
+        self._config = dict(config_entry.options.get(OPTIONS_CONFIG, config_entry.data.get(OPTIONS_CONFIG, {})))
         self._refresh_stats: dict[str, str] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -273,7 +273,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 linked_entities = self._config.get(OPTIONS_LINKED_ENTITIES, {})
                 linked_entities[self._selected_vswitch] = linked_entity
                 self._config[OPTIONS_LINKED_ENTITIES] = linked_entities
-                return self.async_create_entry(title="", data={OPTIONS_CONFIG: self._config})
+                return self.async_create_entry(title="", options={OPTIONS_CONFIG: self._config})
             return await self.async_step_select_linked()
 
         vswitch_info = self._selected_vswitch
@@ -447,7 +447,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 linked_entities = self._config.get(OPTIONS_LINKED_ENTITIES, {})
                 linked_entities[self._selected_vswitch] = linked_entity
                 self._config[OPTIONS_LINKED_ENTITIES] = linked_entities
-                return self.async_create_entry(title="", data={OPTIONS_CONFIG: self._config})
+                return self.async_create_entry(title="", options={OPTIONS_CONFIG: self._config})
 
         vswitch_info = self._selected_vswitch
         vswitch_entity = entity_registry.async_get(self._selected_vswitch)
@@ -478,7 +478,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 if self._selected_vswitch in linked_entities:
                     del linked_entities[self._selected_vswitch]
                     self._config[OPTIONS_LINKED_ENTITIES] = linked_entities
-                return self.async_create_entry(title="", data={OPTIONS_CONFIG: self._config})
+                return self.async_create_entry(title="", options={OPTIONS_CONFIG: self._config})
             return await self.async_step_manage_links()
 
         entity_registry = er.async_get(self.hass)
