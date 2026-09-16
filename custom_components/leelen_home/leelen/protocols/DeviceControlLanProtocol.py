@@ -6,9 +6,8 @@ from ..common import LanProtocolCmd
 
 
 class DeviceControlLanProtocol(BaseLanProtocol):
-    _instance = None
     _lock = threading.Lock()
-    
+
     def __init__(self):
         super().__init__()
         self.cmd = LanProtocolCmd.DEV_CTRL
@@ -16,14 +15,6 @@ class DeviceControlLanProtocol(BaseLanProtocol):
         self.service_address = None
         self.tlv_data = None
         self.TAG = "DeviceControlLanProtocol"
-
-    @classmethod
-    def get_instance(cls) -> 'DeviceControlLanProtocol':
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = DeviceControlLanProtocol()
-        return cls._instance
 
     def build_body(self) -> bool:
         with self._lock:

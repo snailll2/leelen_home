@@ -1,4 +1,3 @@
-from typing import Optional
 import uuid
 import struct
 
@@ -11,23 +10,16 @@ from ..entity.User import User
 
 
 class GetServerCodeWanProtocol(BaseWanProtocol):
-    _instance: Optional['GetServerCodeWanProtocol'] = None
 
     def __init__(self):
         super().__init__()
         self.cmd = WanProtocolCmd.GET_GATEWAY_SERVER
 
-    @classmethod
-    def get_instance(cls) -> 'GetServerCodeWanProtocol':
-        if not cls._instance:
-            cls._instance = GetServerCodeWanProtocol()
-        return cls._instance
-
     def build_body(self) -> bool:
         with self._seq_lock:
             by_array = ConvertUtils.get_address_by_type(DeviceType.APP,
-                                                        User.get_instance().get_account_id())
-            uid = GatewayInfo.get_instance().get_uid()
+                                                        User.get_instance().account_id)
+            uid = GatewayInfo.get_instance().uid
             uuid_str = ""
             if not uid:
                 uuid_str = str(uuid.uuid4()).replace("-", "")

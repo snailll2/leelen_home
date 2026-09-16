@@ -131,7 +131,7 @@ class AckToDao:
     def trans_device_data(self, operate_type: str, keys: list[str], rows: list[str]):
         print("转换设备")
         device_list = []
-        gateway_desc = GatewayInfo.get_instance().get_gateway_desc_string()
+        gateway_desc = GatewayInfo.get_instance().gateway_desc_string
 
         for row in rows:
             split = row.split(',')
@@ -184,7 +184,7 @@ class AckToDao:
     def trans_logic_server_data(self, op_type: str, keys: list[str], rows: list[str]):
         logic_server_list = []
         update_bean_list = []
-        gateway_address = GatewayInfo.get_instance().get_gateway_desc_string()
+        gateway_address = GatewayInfo.get_instance().gateway_desc_string
         key_index = {k: i for i, k in enumerate(keys)}
 
         for row in rows:

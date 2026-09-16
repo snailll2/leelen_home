@@ -68,7 +68,7 @@ class ConnectWan(BaseConnect):
             else:
                 success = False
                 if protocol.response_code == 6:
-                    if User.get_instance().is_login():
+                    if User.get_instance().login_status:
                         WanDataHandleModel.get_instance().response_password_changed()
                     msg = "username or password wrong."
                 elif protocol.response_code == -124:
@@ -85,7 +85,7 @@ class ConnectWan(BaseConnect):
 
             self.set_logon_state(LogonState.LOGGED_ON if success else LogonState.NONE)
 
-            if success and GatewayInfo.get_instance().get_gateway_desc() != GatewayInfo.get_instance().default_desc:
+            if success and GatewayInfo.get_instance().gateway_desc != GatewayInfo.get_instance().default_desc:
                 LogUtils.d(self.tag, "logon wan success, get device list and server id")
                 WanDataHandleModel.get_instance().request_wan_server_id()
 
@@ -95,7 +95,7 @@ class ConnectWan(BaseConnect):
 
         elif protocol.cmd == WanProtocolCmd.PUSH_MSG:
             LogUtils.i(self.tag, "push message")
-            src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().get_account_id())
+            src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().account_id)
             dest = ConvertUtils.get_long_address_by_type(DeviceType.SERVER, 0)
             #
             # push_protocol = PushMsgWanProtocol.get_instance()
@@ -112,13 +112,13 @@ class ConnectWan(BaseConnect):
         elif protocol.cmd == WanProtocolCmd.PASS_THROUGH:
             LogUtils.d(self.tag, "wan pass through data.")
             if protocol.request_data and not ConnectLan.get_instance().is_logged_on():
-                PassThroughWanProtocol.get_instance().handle_pass_through_callback(protocol.request_data)
+                PassThroughWanProtocol().handle_pass_through_callback(protocol.request_data)
             else:
                 LogUtils.i(self.tag, "requestData is null or lan is connected")
 
         elif protocol.cmd == WanProtocolCmd.LOGOUT_GATEWAY:
             LogUtils.d(self.tag, "wan clear serverId.")
-            GatewayInfo.get_instance().set_wan_server_code(None)
+            GatewayInfo.get_instance().wan_server_code = None
 
         elif protocol.cmd == WanProtocolCmd.GATEWAY_ONLINE:
             LogUtils.d(self.tag, "gateway online re get serverId.")
@@ -146,14 +146,14 @@ class ConnectWan(BaseConnect):
     def add_request(self, data: bytes) -> None:
         # 单例对象上用真实实例锁互斥,替代每次新建的假锁
         with self.send_lock:
-            src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().get_account_id())
-            dest = GatewayInfo.get_instance().get_gateway_desc()
+            src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().account_id)
+            dest = GatewayInfo.get_instance().gateway_desc
 
             if len(src) != 8:
                 LogUtils.w(self.tag, "source invalid.")
                 return
 
-            server_code = GatewayInfo.get_instance().get_wan_server_code()
+            server_code = GatewayInfo.get_instance().wan_server_code
             default_id = ProtocolDefault.DEFAULT_WAN_SERVER_ID
 
             try:
@@ -167,7 +167,7 @@ class ConnectWan(BaseConnect):
                 return
 
             if dest and len(dest) == 8:
-                protocol = PassThroughWanProtocol.get_instance()
+                protocol = PassThroughWanProtocol()
                 protocol.set_lan_data(data)
                 protocol.set_src_dest(src, dest)
                 self.send_data(protocol.get_request_data())
@@ -175,9 +175,9 @@ class ConnectWan(BaseConnect):
                 LogUtils.w(self.tag, "dest invalid.")
 
     def create_heartbeat_data(self) -> bytes:
-        src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().get_account_id())
+        src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().account_id)
         dest = ConvertUtils.get_long_address_by_type(DeviceType.SERVER, 0)
-        return HeartWanProtocol.get_instance().get_request_data(src, dest)
+        return HeartWanProtocol().get_request_data(src, dest)
 
     def handle_recv_data(self, data: bytes) -> None:
         if not data:
@@ -220,13 +220,13 @@ class ConnectWan(BaseConnect):
     def send_logon_data(self) -> None:
         LogUtils.i(self.tag, "sendLogonData")
         if not User.get_instance().is_project_account():
-            protocol = LoginWanProtocol.get_instance()
-            protocol.set_app_user(User.get_instance().get_username())
-            protocol.set_app_pwd(User.get_instance().get_password())
+            protocol = LoginWanProtocol()
+            protocol.set_app_user(User.get_instance().username)
+            protocol.set_app_pwd(User.get_instance().password)
             protocol.set_logon_mark(0)
 
-            src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().get_account_id())
-            dest = GatewayInfo.get_instance().get_gateway_desc()
+            src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().account_id)
+            dest = GatewayInfo.get_instance().gateway_desc
             data = protocol.get_request_data(src, dest)
 
             self.set_logon_state(LogonState.LOGGING_ON)

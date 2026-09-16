@@ -47,7 +47,7 @@ class HeartbeatService:
 
     def lan_conn_create(self, binding=False):
         from .ConnectLan import ConnectLan
-        username = User.get_instance().get_username()
+        username = User.get_instance().username
         LogUtils.i(f"lanConnCreate() username {username}")
 
         if not self.can_conn_lan():

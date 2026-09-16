@@ -1,6 +1,4 @@
 import json
-import threading
-from typing import ClassVar, Optional
 
 from ..common import LanProtocolCmd
 from ..entity.dao.ConfigDao import ConfigDao
@@ -10,23 +8,10 @@ from ..utils.LogUtils import LogUtils
 
 
 class QueryModConfigLanProtocol(BaseLanProtocol):
-    _instance: ClassVar[Optional['QueryModConfigLanProtocol']] = None
-    _lock = threading.Lock()
 
     def __init__(self):
-        if QueryModConfigLanProtocol._instance is not None:
-            raise RuntimeError("Use instance() method to get the singleton instance")
-
         super().__init__()
         self.cmd = LanProtocolCmd.CONFIG_MOD_QUERY
-
-    @classmethod
-    def get_instance(cls) -> 'QueryModConfigLanProtocol':
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
 
     def build_body(self) -> bool:
         """Build the protocol request body"""

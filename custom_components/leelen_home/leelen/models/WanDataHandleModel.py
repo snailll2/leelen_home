@@ -32,9 +32,9 @@ class WanDataHandleModel:
         from .ConnectWan import ConnectWan
 
         LogUtils.d(self.TAG, "request_wan_server_id()")
-        protocol = GetServerCodeWanProtocol.get_instance()
-        source = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().get_account_id())
-        dest = GatewayInfo.get_instance().get_gateway_desc()
+        protocol = GetServerCodeWanProtocol()
+        source = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().account_id)
+        dest = GatewayInfo.get_instance().gateway_desc
         ConnectWan.get_instance().send_data(protocol.get_request_data(source, dest))
 
     def response_login_other_place(self):
@@ -62,7 +62,7 @@ class WanDataHandleModel:
             server_code = data[0:2]
             server_id = data[2:18]
 
-            GatewayInfo.get_instance().set_wan_server_code(server_code)
+            GatewayInfo.get_instance().wan_server_code = server_code
             server_value = ConvertUtils.to_unsigned_short(server_code)
 
             LogUtils.d(self.TAG, f"response_wan_server_id() server value: {server_value}")

@@ -52,7 +52,7 @@ class ConnectHandler:
                 if not self.connect_lan.is_binding_gateway:
                     LogUtils.d("log on success then open heart and request config")
                     self.connect_lan.start_heartbeat()
-                    User.get_instance().set_login_status(True)
+                    User.get_instance().login_status = True
                     User.get_instance().save()
                     model = LanDataRequestModel.get_instance()
                     model.request_config_query()
@@ -74,7 +74,7 @@ class ConnectHandler:
                 self.connect_lan.logon_fail_count = 0
                 DataPkgUtils.clear_lan_data()
                 LogUtils.e("lan log on fail times exceed, close.")
-                if GatewayInfo.get_instance().get_gateway_desc() == GatewayInfo.get_instance().default_desc:
+                if GatewayInfo.get_instance().gateway_desc == GatewayInfo.get_instance().default_desc:
                     GatewayInfo.get_instance().reset()
                 self.connect_lan.reset_lan()
 
@@ -149,9 +149,9 @@ class ConnectLan(BaseConnect):
 
     # @property
     def create_heartbeat_data(self):
-        var1 = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().get_account_id())
-        var2 = GatewayInfo.get_instance().get_gateway_desc()
-        return HeartLanProtocol.get_instance().get_request_data(var1, var2, None)
+        var1 = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().account_id)
+        var2 = GatewayInfo.get_instance().gateway_desc
+        return HeartLanProtocol().get_request_data(var1, var2, None)
 
     def on_connect_result(self, success: bool) -> None:
         if success:

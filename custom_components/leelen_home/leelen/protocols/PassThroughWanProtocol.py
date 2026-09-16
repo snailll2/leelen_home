@@ -14,7 +14,6 @@ from ..models.WanDataHandleModel import WanDataHandleModel
 
 class PassThroughWanProtocol(BaseWanProtocol):
     LEN_LAN_NO_PASS = 28
-    _instance = None
     _lock = threading.Lock()
 
     def __init__(self):
@@ -25,14 +24,6 @@ class PassThroughWanProtocol(BaseWanProtocol):
         self.lan_protocol_ver = ProtocolDefault.PROTOCOL_VER_LAN
         self.m_lan_data = None
         self.cmd = WanProtocolCmd.PASS_THROUGH
-
-    @classmethod
-    def get_instance(cls):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = PassThroughWanProtocol()
-        return cls._instance
 
     def build_lan_data(self, data: bytes, gateway_desc: bytes, dest: bytes, seq: bytes) -> bytes:
         data_len = len(data)
@@ -108,7 +99,7 @@ class PassThroughWanProtocol(BaseWanProtocol):
 
     def build_head(self, source: bytes, dest: bytes) -> bool:
         with self._lock:
-            wan_server_code = GatewayInfo.get_instance().get_wan_server_code()
+            wan_server_code = GatewayInfo.get_instance().wan_server_code
             if not wan_server_code:
                 LogUtils.d(self.TAG, "buildHead() wan server id is null")
                 WanDataHandleModel.get_instance().request_wan_server_id()
@@ -172,7 +163,7 @@ class PassThroughWanProtocol(BaseWanProtocol):
                 LogUtils.d(self.TAG, "handlePassThroughCallback() no login gateway")
             else:
                 LogUtils.d(self.TAG, "handlePassThroughCallback() pass through data to lan")
-                if src == GatewayInfo.get_instance().get_gateway_desc():
+                if src == GatewayInfo.get_instance().gateway_desc:
                     lan_data = self.build_lan_data(pass_data, src, dest, seq)
                     ConnectLan.get_instance().handle_pass_through_data(lan_data)
 

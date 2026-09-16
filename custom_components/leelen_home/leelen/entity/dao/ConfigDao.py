@@ -30,14 +30,14 @@ class ConfigDao:
 
     def delete_configs_by_gateway(self):
         LogUtils.i("ConfigDao", "deleteConfigsByGateway")
-        gateway = GatewayInfo.get_instance().get_gateway_desc_string()
+        gateway = GatewayInfo.get_instance().gateway_desc_string
         # Config.delete().where(
         #     (Config.gateway_address == gateway) |
         #     (Config.gateway_address == DEFAULT_GATEWAY_DESC)
         # ).execute()
 
     def get_config_by_gateway(self):
-        gateway = GatewayInfo.get_instance().get_gateway_desc_string()
+        gateway = GatewayInfo.get_instance().gateway_desc_string
         # config = Config.select().where(Config.gateway_address == gateway).first()
         # if config is None:
         #     LogUtils.i("ConfigDao", "getConfigByGateway config == null")
@@ -46,7 +46,7 @@ class ConfigDao:
         return self.config
 
     def save_or_update_config_by_gateway(self, config: Config):
-        gateway = GatewayInfo.get_instance().get_gateway_desc_string()
+        gateway = GatewayInfo.get_instance().gateway_desc_string
         self.config.latest_time = config.latest_time
         # existing = Config.select().where(Config.gateway_address == gateway).first()
         # if existing:

@@ -130,16 +130,16 @@ class BaseLanProtocol:
                 buffer.extend(self.dest)
 
                 if self.is_add_sub:
-                    buffer.extend(GatewayInfo.get_instance().get_sub_tcp_server_code())
+                    buffer.extend(GatewayInfo.get_instance().sub_tcp_server_code)
                 else:
-                    buffer.extend(GatewayInfo.get_instance().get_tcp_server_code())
+                    buffer.extend(GatewayInfo.get_instance().tcp_server_code)
 
                 buffer.extend(self.encrypted)
 
                 if self.is_add_sub:
-                    buffer.extend(GatewayInfo.get_instance().get_sub_tcp_server_code())
+                    buffer.extend(GatewayInfo.get_instance().sub_tcp_server_code)
                 else:
-                    buffer.extend(GatewayInfo.get_instance().get_tcp_server_code())
+                    buffer.extend(GatewayInfo.get_instance().tcp_server_code)
 
                 buffer.extend(self.device_dest)
                 buffer.extend(self.cmd)

@@ -305,7 +305,7 @@ class BaseConnect:
 
     def connect_lan(self):
         if self.get_connect_state() == ConnectState.NONE:
-            self.server_host = GatewayInfo.get_instance().get_lan_address_ip()
+            self.server_host = GatewayInfo.get_instance().lan_address_ip
             self.connect()
 
     def create_heartbeat_data(self) -> bytes:

@@ -26,7 +26,7 @@ class ControlModel:
         _LOGGER.info("!!! device_control called: addr=%s, func=%s, data=%s", service_id, control_type, control_data.hex())
         from ..HeartbeatService import HeartbeatService
 
-        protocol = DeviceControlLanProtocol.get_instance()
+        protocol = DeviceControlLanProtocol()
         service_addr = ConvertUtils.short_to_little_byte_array(service_id)
         protocol.set_service_address(service_addr)
 
@@ -37,8 +37,8 @@ class ControlModel:
 
         request_data = protocol.get_request_data(
             ConvertUtils.get_long_address_by_type(DeviceType.APP,
-                                                  User.get_instance().get_account_id()),
-            GatewayInfo.get_instance().get_gateway_desc(),
+                                                  User.get_instance().account_id),
+            GatewayInfo.get_instance().gateway_desc,
             service_addr
         )
         HeartbeatService.get_instance().request(request_data)

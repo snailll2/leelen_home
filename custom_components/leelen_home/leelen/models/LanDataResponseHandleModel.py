@@ -3,7 +3,7 @@ import threading
 from typing import Dict, Any, List
 
 from ..common import LeelenConst
-from ..common.FrameIdSingleton import FrameIdSingleton
+from ..common.FrameIdSingleton import frame_id_counter
 from ..common.LeelenType import GatewayTable, TableOperateType
 from ..entity.GatewayInfo import GatewayInfo
 from ..entity.ConfigModifyInfo import ConfigModifyInfo
@@ -78,14 +78,14 @@ class LanDataResponseHandleModel:
         LogUtils.d(f"login success ? = {protocol.__dict__}")
         # LogUtils.d(f"login success ? = {parsed}")
 
-        GatewayInfo.get_instance().set_tcp_server_code(protocol.server_id)
+        GatewayInfo.get_instance().tcp_server_code = protocol.server_id
 
         # 发送消息给 handler，what = 2, arg1 = ack
         msg = Message(what=2, arg1=ack)
         handler.send(msg)
 
     def handle_device_status(self, protocol):
-        DeviceStatusLanProtocol.get_instance().update_device_status(protocol)
+        DeviceStatusLanProtocol().update_device_status(protocol)
         # LogUtils.d(f"{protocol.request_data_body}")
 
     def handle_config_query_response(self, protocol: BaseLanProtocol) -> None:
@@ -203,7 +203,7 @@ class LanDataResponseHandleModel:
     #     #     need_sync = (i != i2) and ((i & 0xFFFF) < (i2 & 0xFFFF))
 
     #     # new_struct = StructVersion()
-    #     # new_struct.gateway_address = GatewayInfo.get_instance().get_gateway_desc_string()
+    #     # new_struct.gateway_address = GatewayInfo.get_instance().gateway_desc_string
     #     # new_struct.config_struct_version = config_mod_ack.config_struct_version
     #     # StructVersionDao.get_instance().save_or_update_struct_version_by_gateway(new_struct)
 
@@ -270,7 +270,7 @@ class LanDataResponseHandleModel:
             )
 
             i = ConvertUtils.to_int(base_lan_protocol.frame_id)
-            frame_id = FrameIdSingleton.get_instance().get_frame_id()
+            frame_id = frame_id_counter.frame_id
 
             if fetch_config_mod_ack:
                 LogUtils.d(tag, f"config fetch ack response tbl ： {fetch_config_mod_ack.to_dict()}")
@@ -306,14 +306,14 @@ class LanDataResponseHandleModel:
                 elif not self.config_req_table_name_list and fetch_config_mod_ack.tbl.lower() not in skip_tables:
                     LogUtils.d(LeelenConst.TAG_GATEWAY, "configReqTableNameList success")
                     i3 = ConvertUtils.to_int(base_lan_protocol.frame_id)
-                    frame_id2 = FrameIdSingleton.get_instance().get_frame_id()
+                    frame_id2 = frame_id_counter.frame_id
                     LogUtils.d(tag, f"handleConfigFetchResponse2() frameId2 : {i3}, latestFrameId2 : {frame_id2}")
                     # if i3 < frame_id2:
                     #     return
                     # config = Config()
                     # config.config_version = SharePreferenceModel.get_config_version()
                     # config.latest_time = fetch_config_mod_ack.T2
-                    # config.gateway_address = GatewayInfo.get_instance().get_gateway_desc_string()
+                    # config.gateway_address = GatewayInfo.get_instance().gateway_desc_string
                     # ConfigDao.get_instance().save_or_update_config_by_gateway(config)
                     self.m_lan_data_request_model.request_config_query()
 

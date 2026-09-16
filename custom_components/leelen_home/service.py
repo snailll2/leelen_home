@@ -24,11 +24,11 @@ class LeelenService:
 
     #
     async def async_start(self, config: dict[str, dict[str, str]]) -> None:
-        User.get_instance().set_account_id(self._config.get(CONF_ACCOUNT_ID))
-        User.get_instance().set_username(self._config.get(CONF_USERNAME))
-        User.get_instance().set_password(self._config.get(CONF_PASSWORD))
+        User.get_instance().account_id = self._config.get(CONF_ACCOUNT_ID)
+        User.get_instance().username = self._config.get(CONF_USERNAME)
+        User.get_instance().password = self._config.get(CONF_PASSWORD)
         GatewayInfo.get_instance().set_gateway_desc(self._config.get(CONF_DEVICE_ADDR))
-        GatewayInfo.get_instance().set_lan_address_ip(self._hass.data[DOMAIN].get(CONF_GATEWAY_IP))
+        GatewayInfo.get_instance().lan_address_ip = self._hass.data[DOMAIN].get(CONF_GATEWAY_IP)
 
         """Start the servcie, called when component starts."""
         LogUtils.i(f"{LeelenService.__name__} start async_start")

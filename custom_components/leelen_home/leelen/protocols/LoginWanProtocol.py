@@ -1,5 +1,3 @@
-import threading
-
 from ..common import WanProtocolCmd
 from ..protocols.BaseWanProtocol import BaseWanProtocol
 from ..utils.ConvertUtils import ConvertUtils
@@ -9,8 +7,6 @@ from ..utils.LogUtils import LogUtils
 class LoginWanProtocol(BaseWanProtocol):
     APP_PWD_LENGTH = 32
     APP_USER_LENGTH = 20
-    _instance = None
-    _lock = threading.Lock()
 
     def __init__(self):
         super().__init__()
@@ -19,14 +15,6 @@ class LoginWanProtocol(BaseWanProtocol):
         self.app_user = None
         self.logon_mark = bytes([0xFF, 0xFF])
         self.cmd = WanProtocolCmd.APP_LOGON
-
-    @classmethod
-    def get_instance(cls):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = LoginWanProtocol()
-        return cls._instance
 
     def build_body(self) -> bool:
         if not self.app_user or len(self.app_user) != self.APP_USER_LENGTH:

@@ -1,5 +1,3 @@
-import threading
-
 from ..common import LanProtocolCmd
 from ..models.LogicServerStateModel import LogicServerStateModel
 from ..protocols.BaseLanProtocol import BaseLanProtocol
@@ -9,21 +7,11 @@ from ..utils.TlvUtils import TlvUtils
 
 
 class DeviceStatusLanProtocol(BaseLanProtocol):
-    _instance = None
-    _lock = threading.Lock()
 
     def __init__(self):
         super().__init__()
         self.cmd = LanProtocolCmd.DEV_STATUS
         self.payload_type = bytes([0])
-
-    @classmethod
-    def get_instance(cls) -> 'DeviceStatusLanProtocol':
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = DeviceStatusLanProtocol()
-        return cls._instance
 
     # def update_device_local_status(self, var1: bytes, var2: bytes, var3: bytes) -> None:
     def update_device_local_status(self, b_arr: bytes, b_arr2: bytes, b_arr3: bytes):
