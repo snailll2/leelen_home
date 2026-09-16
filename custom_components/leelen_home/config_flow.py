@@ -12,7 +12,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DOMAIN, OPTIONS_SELECT, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES
+from .const import DOMAIN, OPTIONS_SELECT, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES, CONF_GATEWAY_IP
 from .leelen.api.HttpApi import HttpApi
 from .leelen.utils.LogUtils import LogUtils
 
@@ -118,7 +118,29 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """初始选项菜单，提供刷新按钮"""
         return self.async_show_menu(
             step_id="init",
-            menu_options=["refresh", "link", "manage_links"],
+            menu_options=["refresh", "link", "manage_links", "gateway_ip"],
+        )
+
+    async def async_step_gateway_ip(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """设置网关 LAN IP 覆盖。置空则使用云端 dump.db 自动检测值。
+
+        背景:网关 DHCP 变更 IP 后,云端 dump.db 可能仍保留旧 LAN IP,
+        导致 LAN 连接不到真实网关。允许用户手动指定网关 IP 兜底。
+        """
+        current = self._config.get(CONF_GATEWAY_IP, "")
+        if user_input is not None:
+            value = (user_input.get(CONF_GATEWAY_IP) or "").strip()
+            self._config[CONF_GATEWAY_IP] = value
+            return self.async_create_entry(title="", data={OPTIONS_CONFIG: self._config})
+
+        auto = await HttpApi.get_instance(self.hass).query_gateway_ip()
+        return self.async_show_form(
+            step_id="gateway_ip",
+            data_schema=vol.Schema({
+                vol.Required(CONF_GATEWAY_IP, default=current): str,
+            }),
+            description_placeholders={"auto_ip": auto or "未知"},
+            errors={} if current else None,
         )
 
     async def async_step_refresh(self, user_input: dict[str, Any] | None = None) -> FlowResult:

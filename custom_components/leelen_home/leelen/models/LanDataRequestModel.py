@@ -106,8 +106,9 @@ class LanDataRequestModel:
             User.get_instance().account_id
         )
         dst_addr = GatewayInfo.get_instance().gateway_desc
-        FetchModConfigLanProtocol().set_fetch_config_mod_req(fetch_req)
-        data = FetchModConfigLanProtocol().get_request_data(src_addr, dst_addr, None)
+        fetch_protocol = FetchModConfigLanProtocol()
+        fetch_protocol.set_fetch_config_mod_req(fetch_req)
+        data = fetch_protocol.get_request_data(src_addr, dst_addr, None)
 
         # LogUtils.e(f"{self.TAG}: requestConfigFetch() FetchConfigModReq: {data.hex()}")
 
@@ -125,8 +126,9 @@ class LanDataRequestModel:
                     LogUtils.d(self.TAG,
                                f"config fetch ack request tbl ： {fetch_req.tbl}, type : {fetch_req.type}, "
                                f"num: {fetch_req.num}, T1: {fetch_req.T1}, T2: {fetch_req.T2}")
-                    FetchModConfigLanProtocol().set_fetch_config_mod_req(fetch_req)
-                    data = FetchModConfigLanProtocol().get_request_data(long_address, gateway_desc, None)
+                    fetch_protocol = FetchModConfigLanProtocol()
+                    fetch_protocol.set_fetch_config_mod_req(fetch_req)
+                    data = fetch_protocol.get_request_data(long_address, gateway_desc, None)
                     HeartbeatService.get_instance().request(data)
 
             except Exception as e:
@@ -255,8 +257,9 @@ class LanDataRequestModel:
         login_req.dev_type = 16
         login_req.DUID = GatewayInfo.get_instance().uid
 
-        LoginLanProtocol().set_login_req(login_req)
-        data = LoginLanProtocol().get_request_data(src_addr, dst_addr, None)
+        login_protocol = LoginLanProtocol()
+        login_protocol.set_login_req(login_req)
+        data = login_protocol.get_request_data(src_addr, dst_addr, None)
         ConnectLan.get_instance().send_data(data)
 
     def request_random_key(self, is_temp):

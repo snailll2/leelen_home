@@ -28,6 +28,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN]['devices'][entry.entry_id] = all_devices
 
     gateway_ip = await HttpApi.get_instance(hass).query_gateway_ip()
+    # 网关 DHCP 变更 IP 后,云端 dump.db 可能保留旧 LAN IP(连不上真实网关)。
+    # 允许用户在 options 里手动覆盖;优先使用覆盖值。
+    manual_ip = (entry.options.get(OPTIONS_CONFIG, {}).get(CONF_GATEWAY_IP) or "").strip()
+    if manual_ip:
+        gateway_ip = manual_ip
     hass.data[DOMAIN][CONF_GATEWAY_IP] = gateway_ip
 
 

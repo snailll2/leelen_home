@@ -7,7 +7,7 @@ from ..BaseDaoBean import BaseDaoBean
 from ...entity.GatewayInfo import GatewayInfo
 from ...entity.LogicServer import LogicServer
 from ...handler.DeviceStatusEvent import DeviceStatusEvent
-from ...handler.FlowRxBus import FlowRxBus
+from ...handler import FlowRxBus
 from ...models.LogicServerStateModel import LogicServerStateModel
 from ...utils.Base64Utils import Base64Utils
 
@@ -117,7 +117,7 @@ class AckToDao:
                 device_event.logic_address = logic_addr
                 device_event.function_id = func_id
                 device_event.state = state_bytes
-                FlowRxBus.get_instance().post(device_event)
+                FlowRxBus.post(device_event)
 
                 # if func_id in [18442, 22529, 16395, 18455]:
                 #     env_event = EnvironmentStatusEvent()

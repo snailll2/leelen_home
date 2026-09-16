@@ -2,7 +2,7 @@ from collections import defaultdict
 from threading import Lock
 
 from ..handler.DeviceStatusEvent import DeviceStatusEvent
-from ..handler.FlowRxBus import FlowRxBus
+from ..handler import FlowRxBus
 from ..utils.LogUtils import LogUtils
 
 
@@ -45,7 +45,7 @@ class LogicServerStateModel:
         device_status.logic_address = logic_address
         device_status.function_id = function_id
         device_status.state = state_bytes
-        FlowRxBus.get_instance().post(device_status)
+        FlowRxBus.post(device_status)
 
         # # 发送环境状态事件
         env_function_ids = [18442, 22529, 16395, 18455, 18479, 18478, 18480, 18477]
