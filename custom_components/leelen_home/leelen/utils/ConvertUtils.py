@@ -187,24 +187,8 @@ class ConvertUtils:
 
     @staticmethod
     def hex_to_bytes2(hex_str: str, byte_order: str = 'big') -> bytes:
-        if not hex_str or len(hex_str) % 2 != 0:
-            return None
-
-        num_bytes = len(hex_str) // 2
-        byte_list = []
-
-        if byte_order.lower() == 'little':
-            # 大端：从末尾开始取
-            for i in range(num_bytes):
-                pos = len(hex_str) - (i + 1) * 2
-                byte_list.append(int(hex_str[pos:pos + 2], 16))
-        else:
-            # 小端：从头开始取
-            for i in range(num_bytes):
-                pos = i * 2
-                # LogUtils.d(hex_str[pos:pos + 2])
-                byte_list.append(int(hex_str[pos:pos + 2], 16))
-        return bytes(byte_list)
+        # 与 hex_to_bytes 完全等价,统一走前者。
+        return ConvertUtils.hex_to_bytes(hex_str, byte_order)
 
     @staticmethod
     def hex_to_int(chars: List[str]) -> int:
@@ -279,11 +263,11 @@ class ConvertUtils:
     def to_bytes(number: Union[int, float], byteorder: str = DEFAULT_BYTEORDER) -> bytes:
         if isinstance(number, int):
             if -32768 <= number <= 32767:  # short range
-                return number.to_bytes(2, byteorder)
+                return number.to_bytes(2, byteorder, signed=number < 0)
             elif -2147483648 <= number <= 2147483647:  # int range
-                return number.to_bytes(4, byteorder)
+                return number.to_bytes(4, byteorder, signed=number < 0)
             else:  # long range
-                return number.to_bytes(8, byteorder)
+                return number.to_bytes(8, byteorder, signed=number < 0)
         elif isinstance(number, float):
             return struct.pack('d' if byteorder == 'little' else '>d', number)
         raise TypeError("Unsupported type for conversion")

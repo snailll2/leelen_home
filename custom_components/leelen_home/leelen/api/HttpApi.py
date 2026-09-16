@@ -153,8 +153,8 @@ class HttpApi:
             data = await res.json(encoding="utf-8")
             LogUtils.d(baseRequest.to_dict())
             LogUtils.d(data)
-            if data["result"] != 1:
-                raise Exception(data["message"])
+            if data.get("result") != 1:
+                raise Exception(data.get("message", "verifyCodeLogin failed"))
             self.verifyCodeSign = data.get("params")
             self.username = username
             return data
@@ -167,7 +167,7 @@ class HttpApi:
         username = user_data.get("params", {}).get("userName")
         password = user_data.get("params", {}).get("password")
         data = await self.third_login(username, password)
-        bindCallers = data.get("bindCallers")
+        bindCallers = data.get("bindCallers") or []
         accountId = data.get("accountId")
         if len(bindCallers) > 0:
             deviceAddr = bindCallers[0].get("deviceAddr")

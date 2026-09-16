@@ -3,34 +3,15 @@ from dataclasses import dataclass
 
 @dataclass
 class LinBaseState:
+    """设备状态基类 —— 数据对象 + 与旧代码兼容的访问器。
+
+    字段即状态;get_/set_ 访问器供各平台实体与 CommonModel 兼容旧调用
+    (重建时仅移除 Android 残留的 from_parcel/to_parcel/describe_contents)。
+    """
+
     service_address: int = 0
     service_type: int = 0
     power_state: int = 0
-
-    def __post_init__(self):
-        # You can add any additional initialization logic here
-        pass
-
-    @classmethod
-    def from_parcel(cls, parcel_data: bytes):
-        """
-        Deserialize the state from a byte array (simulating Parcel).
-        """
-        service_address, service_type, power_state = parcel_data
-        return cls(service_address, service_type, power_state)
-
-    def to_parcel(self):
-        """
-        Serialize the state into a byte array (simulating Parcel).
-        """
-        return bytes([self.service_address, self.service_type, self.power_state])
-
-    def describe_contents(self):
-        """
-        Simulating Android's describeContents method.
-        Returns a flag indicating special objects in the parcel.
-        """
-        return 0
 
     def get_power_state(self) -> int:
         return self.power_state
@@ -49,6 +30,6 @@ class LinBaseState:
 
     def set_service_type(self, service_type: int):
         self.service_type = service_type
-        
+
     def __str__(self):
         return str(self.__dict__)

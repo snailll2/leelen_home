@@ -18,9 +18,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import LogUtils
 from .const import DOMAIN
-from .leelen.common.LeelenType import *
+from .leelen.common.LeelenType import LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinCurtainMotorState import LinCurtainMotorState
+from .state_subscription import StateUpdateSubscriber
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +42,9 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
                 entities.append(entity)
         # 为每个设备创建 Light 实体
+    # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)
+    for entity in entities:
+        entity.subscribe_state_updates(hass)
     # 添加实体到 HA
     async_add_entities(entities)
 
@@ -57,10 +61,13 @@ async def async_setup_entry(
     async def handle_refresh():
         await setup_devices_from_db(hass, config_entry, async_add_entities)
 
-    async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    # 保存 unsub,卸载时注销
+    config_entry.async_on_unload(
+        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    )
 
 
-class Cover(CoverEntity):
+class Cover(StateUpdateSubscriber, CoverEntity):
     """Light entities for Leelen Home."""
 
     def __init__(self, logic_addr, device_id: str, name: str,dev_name:str, config_entry: ConfigEntry):
@@ -71,7 +78,7 @@ class Cover(CoverEntity):
         self._device_name = dev_name
         self._logic_addr = logic_addr
         self._config_entry = config_entry
-        self.__attr_current_cover_position = 0
+        self._attr_current_cover_position = 0
 
         self._lin = LinCurtainMotorState()
         self._lin.service_address = logic_addr
@@ -103,11 +110,11 @@ class Cover(CoverEntity):
 
     @property
     def is_closed(self):
-        return self._lin.progress == 0
+        return self._attr_is_closed
 
     @property
     def current_cover_position(self):
-        return self._lin.progress
+        return self._attr_current_cover_position
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         _LOGGER.info("async_open_cover")
@@ -141,10 +148,11 @@ class Cover(CoverEntity):
     async def update_state(self, state: LinCurtainMotorState | LinBaseState):
         LogUtils.d(f"🧯 {self._name} update {state}")
         self._lin.set_power_state(state.power_state)
-        if isinstance(state,LinCurtainMotorState):
-            self._attr_is_closed = state.progress == 0
-            if state.progress <=5 :
-                state.progress = 0
-                
-            self._lin.set_progress(state.progress)
-            self._attr_current_cover_position = state.progress
+        if isinstance(state, LinCurtainMotorState):
+            # 拷贝进度到局部,避免改写传入的 state 对象(脚下留神外部状态)
+            progress = state.progress
+            if progress <= 5:
+                progress = 0
+            self._attr_is_closed = progress == 0
+            self._attr_current_cover_position = progress
+            self._lin.set_progress(progress)

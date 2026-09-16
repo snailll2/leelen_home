@@ -40,23 +40,3 @@ class LinCenterAcState(LinBaseState):
 
     def set_break_down(self, is_break_down: bool):
         self.is_break_down = is_break_down
-
-    def from_parcel(self, parcel_data: bytes):
-        """
-        从字节数组恢复对象（模拟 Parcel 功能）。
-        """
-        service_address, service_type, power_state, mode, speed, setting_temperature, room_temperature, is_break_down = parcel_data
-        return LinCenterAcState(
-            service_address, service_type, power_state,
-            mode, speed, setting_temperature, room_temperature, is_break_down
-        )
-
-    def to_parcel(self):
-        """
-        序列化对象为字节数组（模拟 Parcel）。
-        """
-        return bytes([
-            self.service_address, self.service_type, self.power_state,
-            self.mode, self.speed, self.setting_temperature,
-            int(self.room_temperature), int(self.is_break_down)
-        ])

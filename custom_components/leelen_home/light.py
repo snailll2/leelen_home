@@ -20,9 +20,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import LogUtils
 from .const import DOMAIN
-from .leelen.common.LeelenType import *
+from .leelen.common.LeelenType import FunctionType, FunctionValue, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinBaseState import LinBaseState
+from .state_subscription import StateUpdateSubscriber
 
 # from .miot.miot_spec import MIoTSpecProperty
 # from .miot.miot_device import MIoTDevice, MIoTEntityData,  MIoTServiceEntity
@@ -46,6 +47,9 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                                config_entry)
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
                 entities.append(entity)
+    # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)
+    for entity in entities:
+        entity.subscribe_state_updates(hass)
     # 添加实体到 HA
     async_add_entities(entities)
 
@@ -62,10 +66,13 @@ async def async_setup_entry(
     async def handle_refresh():
         await setup_devices_from_db(hass, config_entry, async_add_entities)
 
-    async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    # 保存 unsub,卸载时注销
+    config_entry.async_on_unload(
+        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    )
 
 
-class Light(LightEntity):
+class Light(StateUpdateSubscriber, LightEntity):
     """Light entities for Xiaomi Home."""
     # pylint: disable=unused-argument
     _VALUE_RANGE_MODE_COUNT_MAX = 30
@@ -77,7 +84,7 @@ class Light(LightEntity):
 
     _brightness_scale: Optional[tuple[int, int]]
     _mode_map: Optional[dict[Any, Any]]
-    _attr_has_entity_name = True  # 推荐启用以符合最新命名规范
+    # name 属性返回完整名称,开启 _attr_has_entity_name 会导致名称被设备前缀重复
     _attr_color_mode = ColorMode.ONOFF
     _attr_supported_color_modes = {ColorMode.ONOFF}
 
@@ -158,14 +165,15 @@ class Light(LightEntity):
         """
         ControlModel.get_instance().device_control(self._logic_addr, FunctionType.FUNCTION_ON_OFF,
                                                    FunctionValue.VALUE_ON)
+        # 立即更新本地状态,否则 UI 直到下一次设备上报才反馈
+        self._prop_on = True
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the light off."""
-        # if not self._prop_on:
-        #     return
         ControlModel.get_instance().device_control(self._logic_addr, FunctionType.FUNCTION_ON_OFF,
                                                    FunctionValue.VALUE_OFF)
+        self._prop_on = False
         self.async_write_ha_state()
 
         # Dirty logic for lumi.gateway.mgl03 indicator light

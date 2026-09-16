@@ -84,6 +84,9 @@ class PassThroughWanProtocol(BaseWanProtocol):
         action = buffer[12:13]
         remain = buffer[13:]
 
+        # 注意:Python bytes 无符号,seq[1] < 0 恒为 False,此分支实际永不执行(Java 直译残留)。
+        # 原语义是「某种 WAN 帧不算 LAN 登录」,但真机字节格式未确认 —— 待真机验证,
+        # 未强行反转以避免改变设备行为。
         if seq[1] < 0 and action[0] == 0 and remain[0] == 6:
             return False
 

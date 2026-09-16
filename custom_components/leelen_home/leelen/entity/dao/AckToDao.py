@@ -2,7 +2,7 @@ import base64
 import threading
 
 from ...utils.LogUtils import LogUtils
-from ...common.LeelenType import *
+from ...common.LeelenType import GatewayTable
 from ..BaseDaoBean import BaseDaoBean
 from ...entity.GatewayInfo import GatewayInfo
 from ...entity.LogicServer import LogicServer
@@ -23,6 +23,7 @@ class AckToDao:
         self.m_value_list: list[str] = []
         self.m_field_list: list[str] = []
         self.mAddDeviceAddressList: list[int] = []
+        self._lock = threading.Lock()
         self.register_fetch_complete_event()
 
     @classmethod
@@ -307,7 +308,7 @@ class AckToDao:
         LogUtils.i(f"transform_data 数据 {fetch_config_mod_ack} ")
 
 
-        with threading.Lock():  # 模拟 synchronized(this)
+        with self._lock:  # 单例对象上的真实互斥,替代每次新建的假锁
             content = fetch_config_mod_ack.cont
             if not content:
                 return

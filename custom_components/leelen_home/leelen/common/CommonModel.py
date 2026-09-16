@@ -355,3 +355,41 @@ class CommonModel:
 
         # 默认情况：开关
         return self.get_cur_switch_state(device_addr, service_type, state_bytes)
+
+    def get_cur_curtain_state(self, device_addr):
+        """窗帘(58/59/571)。真机字节格式未确认,先返回兜底状态避免 AttributeError。待真机验证。"""
+        return self._generic_fallback_state("curtain", device_addr)
+
+    def get_dream_curtain_state(self, device_addr):
+        """梦幻帘(574)。真机字节格式未确认,先返回兜底状态。待真机验证。"""
+        return self._generic_fallback_state("dream_curtain", device_addr)
+
+    def get_cur_dimmer_state(self, service_type, device_addr):
+        """调光(49/561)。真机字节格式未确认,先返回兜底状态。待真机验证。"""
+        return self._generic_fallback_state("dimmer", device_addr)
+
+    def get_cur_ventilation_system_state(self, device_addr):
+        """通风系统(148)。真机字节格式未确认,先返回兜底状态。待真机验证。"""
+        return self._generic_fallback_state("ventilation", device_addr)
+
+    def get_cur_ladder_state(self, device_addr):
+        """阶梯(158)。真机字节格式未确认,先返回兜底状态。待真机验证。"""
+        return self._generic_fallback_state("ladder", device_addr)
+
+    def get_cur_smart_socket_state(self, device_addr):
+        """智能插座(518)。真机字节格式未确认,先返回兜底状态。待真机验证。"""
+        return self._generic_fallback_state("smart_socket", device_addr)
+
+    def get_cur_rgb_light_state(self, service_type, device_addr):
+        """RGB 灯(567/568/569)。真机字节格式未确认,先返回兜底状态。待真机验证。"""
+        return self._generic_fallback_state("rgb_light", device_addr)
+
+    def _generic_fallback_state(self, device_kind: str, service_address: int) -> LinBaseState:
+        """兜底解析:可解析类型缺失时返回泛型状态,保证状态传递不中断。"""
+        LogUtils.w(
+            f"CommonModel: {device_kind}(addr={service_address}) 解析器未实现,"
+            f"返回兜底状态 — 待真机验证该设备类型的字节格式"
+        )
+        state = LinBaseState()
+        state.set_service_address(service_address)
+        return state

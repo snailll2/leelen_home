@@ -93,6 +93,8 @@ class DeviceStateModel:
             if data and len(data) == 2:
                 high = data[1]
                 low = data[0]
+                # high 来自 bytes,Python 无符号,`high < 0` 恒 False(Java 直译残留死分支)。
+                # 若真机上温度读数偏差,需确认 high 是否按有符号解读 —— 待真机验证,不强改公式。
                 if high < 0:
                     high += 256
                 temp_val = ((high * 100) + low) / 100.0 - 100.0

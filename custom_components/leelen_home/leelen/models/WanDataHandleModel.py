@@ -52,18 +52,9 @@ class WanDataHandleModel:
         GatewayInfo.get_instance().reset()
 
     def response_password_changed(self):
-        from .ConnectWan import ConnectWan
-
+        # 与 response_login_other_place 处理逻辑完全一致,统一走后者。
         LogUtils.d(self.TAG, "response_password_changed() post password wrong event")
-        User.get_instance().reset()
-        logon_state = LogonState.NONE
-        ConnectLan.get_instance().set_logon_state(logon_state)
-        # ConnectWan.get_instance().set_logon_state(logon_state)
-        ConnectLan.get_instance().close()
-        ConnectWan.get_instance().close()
-        DataPkgUtils.clear_lan_data()
-        DataPkgUtils.clear_wan_data()
-        GatewayInfo.get_instance().reset()
+        self.response_login_other_place()
 
     def response_wan_server_id(self, protocol):
         if protocol.response_code == 1:

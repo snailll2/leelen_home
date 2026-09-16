@@ -1,32 +1,5 @@
-# from HeartbeatService import HeartbeatService
-# from common.DefaultThreadPool import *
-# from common.LeelenConst import *
-# from common.LeelenType import *
-# from models.ControlModel import *
-# from models.LanDataRequestModel import *
-# from models.LanDataResponseHandleModel import *
-# from models.LogicServerStateModel import *
-# from utils.ConvertUtils import *
-#
-# from protocols.BaseLanProtocol import *
-# from protocols.BaseWanProtocol import *
-# from protocols.BindGatewayLanProtocol import *
-# from protocols.DeviceControlLanProtocol import *
-# from protocols.DeviceStatusLanProtocol import *
-# from protocols.FetchModConfigLanProtocol import *
-# from protocols.GetDeviceStatusLanProtocol import *
-# from protocols.GetServerCodeWanProtocol import *
-# from protocols.LoginLanProtocol import *
-# from protocols.LoginWanProtocol import *
-# from protocols.PassThroughWanProtocol import *
-# from protocols.QueryModConfigLanProtocol import *
-# from protocols.RandomLanProtocol import *
-# from utils.AesCoder import *
-# from utils.CRC8Utils import *
-# from utils.ConvertUtils import *
-# from utils.DataPkgUtils import *
-# from utils.EncodeUtil import *
-# from utils.LogUtils import *
-# from utils.RSAEncrypt import *
-# from utils.SslUtils import *
-# from utils.TlvUtils import *
+"""leelen 包 — 立林(Lan/Serial/云端)协议与连接实现的顶层包。
+
+历史遗留:整段被注释的 ``import *`` 已被清除(svn 迁移/直译 Java 时遗留)。
+包本身不导出任何符号,各子模块按需 ``from .xx import yy`` 导入。
+"""

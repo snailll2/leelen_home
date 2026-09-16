@@ -22,7 +22,11 @@ class ConfigDao:
 
     def delete_config_table(self):
         LogUtils.i("ConfigDao", "deleteConfigTable")
-        Config.delete().execute()
+        # Config 是 dataclass,无 ORM 的 .delete()/execute();此处重置内存态即可。
+        self.config = Config()
+
+    def get_current_config(self):
+        return self.get_config_by_gateway()
 
     def delete_configs_by_gateway(self):
         LogUtils.i("ConfigDao", "deleteConfigsByGateway")

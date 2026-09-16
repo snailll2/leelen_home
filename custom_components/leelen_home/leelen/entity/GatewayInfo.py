@@ -1,5 +1,4 @@
 import array
-# import logging
 import uuid
 from threading import Lock
 
@@ -10,6 +9,12 @@ from ..utils.LogUtils import LogUtils
 
 
 class GatewayInfo:
+    """网关运行时状态 —— 纯数据持有,字段即状态,直接属性读写。
+
+    遗留:Java getter/setter 包装(get_*/set_*)已清除。
+    保留真方法:set_gateway_desc(派生两个字段)、had_wan_server_code/is_default_gateway(派生判定)、reset/set_desc。
+    """
+
     TAG = "GatewayInfo"
     _instance = None
     _lock = Lock()
@@ -21,7 +26,7 @@ class GatewayInfo:
             LeelenConst.ALL_FF_DESC
         )
         self.gateway_desc = self.default_desc
-        self.gateway_name = ""
+        self.gateway_name = "Zigbee无线网"
         self.had_bind = False
         self.lan_address_ip = ""
         self.gateway_desc_string = ConvertUtils.bytes_to_hex(
@@ -32,7 +37,6 @@ class GatewayInfo:
         self.temp_gateway_desc = self.default_desc
         self.uid = str(uuid.uuid4()).replace("-", "")
         self.wan_server_code = ProtocolDefault.DEFAULT_WAN_SERVER_ID
-        self.gateway_name = "Zigbee无线网"
 
     @classmethod
     def get_instance(cls):
@@ -44,42 +48,6 @@ class GatewayInfo:
 
     def set_desc(self):
         pass
-
-    def get_aes_key(self):
-        return self.aes_key
-
-    def get_gateway_desc(self):
-        return self.gateway_desc
-
-    def get_gateway_desc_string(self):
-        return self.gateway_desc_string
-
-    def get_gateway_name(self):
-        return self.gateway_name
-
-    def get_had_bind(self):
-        return self.had_bind
-
-    def get_lan_address_ip(self):
-        LogUtils.d(f"{self.TAG}: getLanAddressIp() ip: {self.lan_address_ip}")
-        return self.lan_address_ip
-
-    def get_sub_tcp_server_code(self):
-        return self.sub_tcp_server_code
-
-    def get_tcp_server_code(self):
-        return self.tcp_server_code
-
-    def get_temp_gateway_desc(self):
-        LogUtils.d(
-            f"{self.TAG}: getTempGatewayDesc() tempGatewayDesc value {ConvertUtils.bytes_to_hex(self.temp_gateway_desc)}")
-        return self.temp_gateway_desc
-
-    def get_uid(self):
-        return self.uid
-
-    def get_wan_server_code(self):
-        return self.wan_server_code
 
     def had_wan_server_code(self):
         return (self.wan_server_code is not None and
@@ -109,27 +77,3 @@ class GatewayInfo:
 
         LogUtils.d(
             f"{self.TAG}: setGatewayDesc() gatewayDesc value {self.gateway_desc_string},{self.gateway_desc}")
-        # self.gateway_desc = desc
-        # self.gateway_desc_string = ConvertUtils.bytes_to_hex(ConvertUtils.reverse(desc))
-
-    def set_gateway_name(self, name):
-        self.gateway_name = name
-
-    def set_had_bind(self, had_bind):
-        self.had_bind = had_bind
-
-    def set_lan_address_ip(self, ip):
-        self.lan_address_ip = ip
-
-    def set_sub_tcp_server_code(self, code):
-        self.sub_tcp_server_code = code
-
-    def set_tcp_server_code(self, code):
-        self.tcp_server_code = code
-
-    def set_temp_gateway_desc(self, desc):
-        LogUtils.d(f"{self.TAG}: setTempGatewayDesc() tempGatewayDesc value {ConvertUtils.bytes_to_hex(desc)}")
-        self.temp_gateway_desc = desc
-
-    def set_wan_server_code(self, code):
-        self.wan_server_code = code

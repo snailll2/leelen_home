@@ -37,6 +37,17 @@ class ConnectWan(BaseConnect):
                 cls._instance = ConnectWan(server_host)
             return cls._instance
 
+    @classmethod
+    def reset_instance(cls) -> None:
+        """释放单例,供 HA 卸载/重载时清理,避免复用旧 socket/线程"""
+        with cls._lock:
+            if cls._instance is not None:
+                try:
+                    cls._instance.close()
+                except Exception as e:
+                    LogUtils.e(f"reset ConnectWan error: {e}")
+                cls._instance = None
+
     def handle_protocol_data(self, protocol: BaseWanProtocol) -> None:
         LogUtils.i(self.tag, "handleProtocolData Wan")
         if not protocol:
@@ -133,7 +144,8 @@ class ConnectWan(BaseConnect):
             #     RxBus.get_instance().post(event)
 
     def add_request(self, data: bytes) -> None:
-        with threading.Lock():
+        # 单例对象上用真实实例锁互斥,替代每次新建的假锁
+        with self.send_lock:
             src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().get_account_id())
             dest = GatewayInfo.get_instance().get_gateway_desc()
 

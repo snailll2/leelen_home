@@ -69,7 +69,7 @@ class AesCoder:
         try:
             raw_key = AesCoder.get_raw_key(key.encode('utf-8'))
             encrypted = AesCoder._encrypt(raw_key, data.encode('utf-8'))
-            return AesCoder.to_hex(encrypted)
+            return AesCoder.to_hex_bytes(encrypted)  # _encrypt 返回 bytes,须用 to_hex_bytes
         except Exception as e:
             LogUtils.d(f"{AesCoder.TAG} encrypt_with_key Exception: {str(e)}")
             return ""

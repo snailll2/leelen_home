@@ -1,4 +1,3 @@
-import asyncio
 import json
 import threading
 from typing import Dict, Any, List
@@ -31,6 +30,7 @@ class LanDataResponseHandleModel:
         self.config_req_table_name_list = []
         self.m_change_table_name_list = []
         self.is_expired = False
+        self._lock = threading.Lock()
         self.m_lan_data_request_model = LanDataRequestModel.get_instance()
 
     @staticmethod
@@ -239,12 +239,13 @@ class LanDataResponseHandleModel:
     #     #     LanDataRequestModel.get_instance().request_config_query()
 
     def _handle_sync_complete(self, config_ack: Dict[str, Any]) -> None:
-        """处理完整配置同步"""
-        from ..api.HttpApi import HttpApi
-        LogUtils.d("Configuration update complete, 开始获取设备状态信息")
-        devices = asyncio.run(HttpApi.get_instance().query_devices("/Users/snail/Downloads/dump.db"))
-        for device in devices:
-            LanDataRequestModel.get_instance().request_device_status(device.get("dev_addr"))
+        """处理完整配置同步(当前仅记录日志)。
+
+        原实现对每个设备调用 asyncio.run(HttpApi.query_devices(...)),且路径硬编码为
+        /Users/snail/Downloads/dump.db —— 该路径不存在,且在被调用线程里 asyncio.run 会在事件循环
+        线程执行时报 RuntimeError。设备在线状态查询已由接收路径自行轮询,此处在卸载/重载边界保留日志钩子。
+        """
+        LogUtils.d("Configuration update complete, 开始获取设备状态信息(由设备接收路径自动轮询)")
 
         # event_data = {
         #     "is_complete": True,
@@ -259,7 +260,7 @@ class LanDataResponseHandleModel:
         # LanDataRequestModel.get_instance().request_config_query()
 
     def handle_config_fetch_response(self, base_lan_protocol: BaseLanProtocol):
-        with threading.Lock():  # 模拟 synchronized(this)
+        with self._lock:  # 单例对象上的真实互斥,替代每次新建的假锁
             tag = self.TAG
             LogUtils.d(tag, f"handleConfigFetchResponse() {base_lan_protocol.request_data_body}")
 
@@ -342,40 +343,19 @@ class LanDataResponseHandleModel:
     #     # )
 
     def _handle_partial_update(self, config_ack: Dict[str, Any]) -> None:
-        """处理部分配置更新"""
+        """处理部分配置更新。
+
+        原实现引用 undefined 的 needs_update / _get_config_request,且在 dataclass Config 上访问
+        不存在的 .version 字段,必然崩溃;还调用 update_config_time(T2, None) 多传一个参数。
+        此处收敛为「记录同步时刻 + 日志」的兜底实现,避免 LAN 响应处理链中断 —— 待真机验证。
+        """
         if not config_ack.get("mod_info"):
-        #     DownloadDbByHttpSingleton.get_instance().can_download_http = True
-            ConfigDao.get_instance().update_config_time(config_ack["T2"], None)
+            ConfigDao.get_instance().update_config_time(config_ack.get("T2", 0))
 
-        # struct_version = StructVersionDao.get_instance().get_struct_version()
-        # needs_update = (
-        #         struct_version is None or
-        #         (struct_version.config_struct_version & 0xFFFF) < (config_ack["config_struct_version"] & 0xFFFF)
-        # )
-
-        # new_version = StructVersion(
-        #     gateway_address=GatewayInfo.get_instance().gateway_desc,
-        #     config_struct_version=config_ack["config_struct_version"]
-        # )
-        # StructVersionDao.get_instance().save_version(new_version)
-
-        current_config = ConfigDao.get_instance().get_current_config()
-        if (
-                config_ack["T1"] == 0 or
-                (not needs_update and
-                 current_config and
-                 current_config.version == config_ack["config_version"] and
-                 current_config.latest_time <= config_ack["T2"])
-        ):
-            if current_config and current_config.latest_time != config_ack["T1"]:
-                return
-        #
-            LogUtils.d(LeelenConst.TAG_GATEWAY, "Secondary gateway data sync")
-        #     SharePreferenceModel.set_config_version(config_ack["config_version"])
-            self._get_config_request(config_ack["T1"], config_ack["T2"], config_ack["mod_info"])
-        #     DownloadDbByHttpSingleton.get_instance().can_download_http = True
-        else:
-            LogUtils.d(LeelenConst.TAG_GATEWAY, "Primary gateway data sync")
+        LogUtils.d(
+            LeelenConst.TAG_GATEWAY,
+            f"config partial update, T1={config_ack.get('T1')}, T2={config_ack.get('T2')}"
+        )
         #     if ConnectLan.get_instance().is_connected_and_logged_in:
         #         DownloadModel.get_instance().download_gateway_db(force=True)
         #     elif DownloadDbByHttpSingleton.get_instance().can_download_http:

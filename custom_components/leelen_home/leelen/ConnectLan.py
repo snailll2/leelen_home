@@ -136,6 +136,17 @@ class ConnectLan(BaseConnect):
                     cls._instance = ConnectLan()
         return cls._instance
 
+    @classmethod
+    def reset_instance(cls):
+        """释放单例,供 HA 卸载/重载时清理,避免复用旧 socket/线程"""
+        with cls._lock:
+            if cls._instance is not None:
+                try:
+                    cls._instance.close()
+                except Exception as e:
+                    LogUtils.e(f"reset ConnectLan error: {e}")
+                cls._instance = None
+
     # @property
     def create_heartbeat_data(self):
         var1 = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().get_account_id())

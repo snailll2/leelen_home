@@ -22,9 +22,10 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .leelen.states.LinCenterAcState import LinCenterAcState
 from . import LogUtils
 from .const import DOMAIN, HVAC_MODE_MAP, FAN_MODE_SPEED_MAP, SPEED_FAN_MODE_MAP, MODE_HVAC_MAP
-from .leelen.common.LeelenType import *
+from .leelen.common.LeelenType import FunctionType, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinSensorState import LinSensorState
+from .state_subscription import StateUpdateSubscriber
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,6 +70,9 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                                  config_entry)
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
                 entities.append(entity)
+    # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)
+    for entity in entities:
+        entity.subscribe_state_updates(hass)
     # 添加实体到 HA
     async_add_entities(entities)
 
@@ -85,10 +89,13 @@ async def async_setup_entry(
     async def handle_refresh():
         await setup_devices_from_db(hass, config_entry, async_add_entities)
 
-    async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    # 保存 unsub,卸载时注销,避免 refresh 分发重复添加实体
+    config_entry.async_on_unload(
+        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    )
 
 
-class Climate(ClimateEntity, RestoreEntity):
+class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
     """Climate entities for Leelen Home."""
 
     def __init__(self, logic_addr, device_id: str, logic_name: str, dev_name: str, config_entry: ConfigEntry):
@@ -104,9 +111,8 @@ class Climate(ClimateEntity, RestoreEntity):
 
         self._attr_target_temperature = 25.0
         self._attr_current_temperature = 25.0
-        self._attr_target_temperature_high: float
-        self._attr_target_temperature_low: float
-        self._attr_target_temperature_step: float = None
+        self._attr_target_temperature_high: float | None = None
+        self._attr_target_temperature_low: float | None = None
         self._attr_temperature_unit: str = ""
         self._attr_min_temp: float = DEFAULT_MIN_TEMP
         self._attr_max_temp: float = DEFAULT_MAX_TEMP
@@ -125,8 +131,8 @@ class Climate(ClimateEntity, RestoreEntity):
         self._attr_max_humidity: int = DEFAULT_MAX_HUMIDITY
         self._attr_min_humidity: int = DEFAULT_MIN_HUMIDITY
 
-        self._attr_precision: float = 0
-        self._attr_preset_mode: str = ""
+        self._attr_precision: float = 0.1
+        self._attr_preset_mode: str | None = None
         self._attr_preset_modes: list[str] = []
 
         self._attr_swing_mode: str = ""
@@ -243,29 +249,32 @@ class Climate(ClimateEntity, RestoreEntity):
 
     @property
     def preset_mode(self):
-        if not self.is_on:
-            return HVACMode.OFF
-        return HVACMode.HEAT_COOL
+        # 本集成未实现预设模式(preset);preset_mode/preset_modes 应返回 preset 语义,
+        # 而不是 HVAC 模式。无预设时返回 None。
+        return None
 
     @property
     def preset_modes(self):
-        return self.hvac_modes
+        return []
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.OFF:
-            self.turn_off()
+            await self.async_turn_off()
+            self._attr_hvac_mode = HVACMode.OFF
+            self.async_write_ha_state()
             return
 
-        self.turn_on()
+        # 先更新内部状态,再发起控制,再写 HA 状态(修正原来 write 在赋值之前的顺序颠倒)
+        await self.async_turn_on()
         self._lin.set_power_state(3)
 
         mode = HVAC_MODE_MAP.get(hvac_mode)
         if mode is not None:
             self._lin.set_mode(mode)
 
+        self._attr_hvac_mode = hvac_mode
         ControlModel.get_instance().control(self._lin, 0)
         self.async_write_ha_state()
-        self._attr_hvac_mode = hvac_mode
 
     @property
     def fan_mode(self):
@@ -297,11 +306,11 @@ class Climate(ClimateEntity, RestoreEntity):
 
     @property
     def target_temperature_high(self):
-        return self.max_temp
+        return self._attr_target_temperature_high if self._attr_target_temperature_high is not None else self.max_temp
 
     @property
     def target_temperature_low(self):
-        return self.min_temp
+        return self._attr_target_temperature_low if self._attr_target_temperature_low is not None else self.min_temp
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         self._lin.set_power_state(3)
@@ -385,11 +394,18 @@ class Climate(ClimateEntity, RestoreEntity):
     async def update_state(self, state: LinCenterAcState | LinSensorState):
         LogUtils.d(f"🧯 {self._name} climate update {state}")
 
-        if state.get_service_type() == FunctionType.FUNCTION_AC_TEMP:
-            self._attr_current_temperature = state.get_value()
-        else:
-            self._prop_on = state.power_state == 1
-            self._attr_fan_mode = SPEED_FAN_MODE_MAP.get(state.speed, "low")
+        if isinstance(state, LinSensorState):
+            if state.get_service_type() == FunctionType.FUNCTION_AC_TEMP:
+                self._attr_current_temperature = state.get_value()
+            return
+
+        # 电源状态是状态报告的基础,按原语义无条件更新(power_state == 1 表示开)
+        self._prop_on = state.power_state == 1
+        # mode/speed/setting_temperature 的默认值是 0,若上报帧未携带则该字段为 0,
+        # 不应回写覆盖已确认的模式/风速/目标温度(否则连续上报会互相覆盖成不完整状态)
+        if state.mode:
             self._attr_hvac_mode = MODE_HVAC_MAP.get(state.mode, HVACMode.FAN_ONLY)
+        if state.speed:
+            self._attr_fan_mode = SPEED_FAN_MODE_MAP.get(state.speed, "low")
+        if state.setting_temperature:
             self._attr_target_temperature = state.setting_temperature
-            # self._attr_current_temperature = state.setting_temperature

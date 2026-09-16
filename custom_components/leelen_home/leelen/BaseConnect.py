@@ -54,12 +54,15 @@ class BaseConnect:
         self.heartbeat_data = self.create_heartbeat_data()
         self.heartbeat_interval = 5  # seconds
         self.pre_heartbeat_recv = False
-        self.pre_heartbeat_recv_time = -1
+        self.pre_heartbeat_recv_time = time.time()
         self.pre_heartbeat_start_time = time.time()
         self.pre_heartbeat_send_time = -1
         self.connect_retry_count = 0
         self.show_log = True
         self.tag = "🍺 BaseConnect:"
+        # 连接/发送超时(秒);无超时会在网关失联时挂死工作线程。
+        self.connect_timeout = 5
+        self.send_timeout = 5
 
         # Thread pool for async operations
         # self.thread_pool = DefaultThreadPool.get_instance()
@@ -124,9 +127,12 @@ class BaseConnect:
                     LogUtils.d(self.tag,"start socket.socket")
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     self.m_socket = context.wrap_socket(sock, server_hostname=self.server_host, server_side=False)
-                    # self.m_socket.settimeout(5)
+                    # 连接超时,防止失联网关长时间阻塞 connect 线程
+                    self.m_socket.settimeout(self.connect_timeout)
                     self.m_socket.connect((self.server_host, self.server_port))
                     self.m_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    # 发送超时,防止对端不读导致 send 卡死
+                    self.m_socket.settimeout(self.send_timeout)
                     LogUtils.d(self.tag,"end socket.socket")
 
                     if not self.m_socket:
@@ -138,8 +144,7 @@ class BaseConnect:
 
                     if self.m_socket and self.m_socket.fileno() != -1:  # Check if connected
                         try:
-                            LogUtils.d(self.tag,f"{self.m_recv_data_running} start r_recv_data thread")
-                            self.m_output_stream = self.m_socket.makefile('wb')
+                            LogUtils.d(self.tag, f"{self.m_recv_data_running} start r_recv_data thread")
                             self.set_connect_state(ConnectState.CONNECTED)
 
                             # if not self.m_recv_data_running:
@@ -205,44 +210,72 @@ class BaseConnect:
 
             try:
                 if self.m_socket:
-                    with self.socket_lock:
-                        # 设置socket为非阻塞模式，避免recv()调用阻塞
+                    # 软超时只设置一次;对端关闭返回 b'' 时退出循环并复位,避免空转
+                    try:
+                        self.m_socket.settimeout(0.5)
+                    except Exception as e:
+                        LogUtils.d(self.tag, f"Set socket timeout error: {e}")
+
+                    eof = False
+                    while self.m_recv_data_running:
                         try:
-                            self.m_socket.settimeout(0.5)  # 设置0.5秒超时
-                        except Exception as e:
-                            LogUtils.d(self.tag,f"Set socket timeout error: {e}")
-                        
-                        while self.m_recv_data_running:
-                            try:
-                                data = self.m_socket.recv(4096)
-                                if data:
-                                    self.handle_recv_data(data)
-                                else:
-                                    continue
-                            except BlockingIOError:
-                                # 非阻塞模式下没有数据可读，继续循环
-                                continue
-                            except TimeoutError:
-                                # 超时异常，继续循环
-                                continue
-                        LogUtils.i(self.tag,f"recv_data_runnable() exit")
+                            data = self.m_socket.recv(4096)
+                            if data:
+                                self.handle_recv_data(data)
+                            else:
+                                # recv() 返回空字节表示对端关闭连接(EOF)
+                                eof = True
+                                break
+                        except (BlockingIOError, TimeoutError, socket.timeout):
+                            # 无数据可读或软超时,继续循环
+                            continue
+                        except OSError as e:
+                            LogUtils.w(self.tag, f"recv socket error: {e}")
+                            eof = True
+                            break
+                    LogUtils.i(self.tag, "recv_data_runnable() exit")
+                    # 若非主动停止,则是对端关闭/出错,复位连接
+                    if eof and self.m_recv_data_running:
+                        self.reset()
             except Exception as e:
-                with threading.Lock():
+                with self.recv_lock:
                     self.m_recv_data_running = False
-                if self.show_log:
-                    LogUtils.e(self.tag,f"Receive data error: {e}")
-                # 在接收数据出错时重启连接
+                LogUtils.e(self.tag, f"Receive data error: {e}")
+                # 在接收数据出错或对端关闭时重启连接
                 self.reset()
             finally:
-                with threading.Lock():
+                with self.recv_lock:
                     self.m_recv_data_running = False
 
         return run
 
     def close(self):
-        pass
-        # self.stop_heartbeat()
-        # self.thread_pool.submit(self.reset)
+        """Teardown: stop all background threads and socket. Call on HA unload."""
+        self.m_recv_data_running = False
+        self.stop_heartbeat()
+        self.stop_connect_executor()
+        self.stop_recv_data_executor()
+
+        with self.socket_lock:
+            if self.m_socket:
+                try:
+                    self.m_socket.close()
+                except Exception as e:
+                    if self.show_log:
+                        LogUtils.d(self.tag, f"Close socket error: {e}")
+                self.m_socket = None
+
+        if hasattr(self, 'm_output_stream') and self.m_output_stream:
+            try:
+                self.m_output_stream.close()
+            except Exception as e:
+                if self.show_log:
+                    LogUtils.d(self.tag, f"Close output stream error: {e}")
+            self.m_output_stream = None
+
+        self.set_connect_state(ConnectState.NONE)
+        self.set_logon_state(LogonState.NONE)
+        LogUtils.i(self.tag, "closed")
 
     def connect(self):
         try:
@@ -290,23 +323,16 @@ class BaseConnect:
         raise NotImplementedError()
 
     def heartbeat_once(self):
-        LogUtils.d(self.tag,f"Heartbeat once")
+        LogUtils.d(self.tag, "Heartbeat once")
         self.heartbeat_data = self.create_heartbeat_data()
-        # self.thread_pool.submit(self.r_heartbeat)
-        # DefaultThreadPool.get_instance().execute(self.r_heartbeat)
-        threading.Thread(target=self.r_heartbeat).start()
+        # 复用线程池,而不是每次新建一次性线程(避免线程泄漏)
+        DefaultThreadPool.get_instance().execute(self.r_heartbeat)
 
     def is_available(self) -> bool:
+        # 说明:TLS socket 不支持 TCP 紧急数据(MSG_OOB),原实现在此会误报失败。
+        # 改为非破坏性判断:TCP 层已连接且接收线程存活即视为可用,活度交由心跳超时判断。
         if self.m_socket and self.m_socket.fileno() != -1:
-            with self.socket_lock:
-                try:
-                    # Test connection by sending urgent data
-                    self.m_socket.send(b'\xFF', socket.MSG_OOB)
-                    return True
-                except Exception as e:
-                    if self.show_log:
-                        LogUtils.d(self.tag,f"Connection test failed: {e}")
-                    return False
+            return self.m_recv_data_running
         return False
 
     def is_logged_on(self) -> bool:
@@ -343,56 +369,61 @@ class BaseConnect:
         self.pre_heartbeat_recv_time = time.time()
 
     def reset(self):
-        LogUtils.w(self.tag,f"Reset connection")
-        
-        # 1. 停止所有运行的线程
+        LogUtils.w(self.tag, "Reset connection")
+
+        # 1. 停止所有运行线程(含心跳,避免旧心跳继续驱动已关闭的 socket)
         self.m_recv_data_running = False
-        # self.stop_heartbeat()
+        self.stop_heartbeat()
         self.stop_connect_executor()
         self.stop_recv_data_executor()
-        
+
         # 2. 关闭socket和流
-        if self.m_socket:
-            try:
-                self.m_socket.close()
-                LogUtils.d(self.tag,f"Socket closed")
-            except Exception as e:
-                if self.show_log:
-                    LogUtils.d(self.tag,f"Close socket error: {e}") 
-            self.m_socket = None
-        
+        with self.socket_lock:
+            if self.m_socket:
+                try:
+                    self.m_socket.close()
+                    LogUtils.d(self.tag, "Socket closed")
+                except Exception as e:
+                    if self.show_log:
+                        LogUtils.d(self.tag, f"Close socket error: {e}")
+                self.m_socket = None
+
         if hasattr(self, 'm_output_stream') and self.m_output_stream:
             try:
                 self.m_output_stream.close()
-                LogUtils.d(self.tag,f"Output stream closed")
             except Exception as e:
                 if self.show_log:
-                    LogUtils.d(self.tag,f"Close output stream error: {e}") 
+                    LogUtils.d(self.tag, f"Close output stream error: {e}")
             self.m_output_stream = None
-        
+
         # 3. 重置状态
         self.set_connect_state(ConnectState.NONE)
         self.set_logon_state(LogonState.NONE)
-        self.connect_retry_count = 0
         self.pre_heartbeat_recv = False
-        self.pre_heartbeat_recv_time = -1
+        self.pre_heartbeat_recv_time = time.time()
         self.pre_heartbeat_start_time = time.time()
         self.pre_heartbeat_send_time = -1
-        
-        LogUtils.d(self.tag,f"Reset completed, preparing to reconnect")
-        
-        # 4. 自动重新连接
+
+        LogUtils.d(self.tag, "Reset completed, preparing to reconnect")
+
+        # 4. 指数退避重连,避免死网络下的重连风暴
+        max_delay = 60
+        delay = min(max_delay, self.connect_retry_count * 2.0)
+        self.connect_retry_count += 1
+        LogUtils.i(self.tag, f"backoff {delay:.1f}s (retry #{self.connect_retry_count})")
+        if delay > 0:
+            time.sleep(delay)
+
         try:
-            LogUtils.d(self.tag,f"Calling connect_lan()")
             self.connect_lan()
         except Exception as e:
-            LogUtils.e(self.tag,f"Error during reconnect: {e}")
-        
+            LogUtils.e(self.tag, f"Error during reconnect: {e}")
+
         # 5. 确保心跳线程重新启动
         try:
             self.start_heartbeat()
         except Exception as e:
-            LogUtils.e(self.tag,f"Error starting heartbeat: {e}")
+            LogUtils.e(self.tag, f"Error starting heartbeat: {e}")
         
 
     def send_data(self, data: bytes):
@@ -409,29 +440,29 @@ class BaseConnect:
                         self.m_socket.sendall(data)
                 except Exception as e:
                     if self.show_log:
-                        LogUtils.d(self.tag,f"Send data error: {e}")
+                        LogUtils.d(self.tag, f"Send data error: {e}")
                     # 当遇到Broken pipe等错误时，重置连接
                     if isinstance(e, (ConnectionResetError, BrokenPipeError, OSError)):
-                        LogUtils.w(self.tag,f"Connection error, resetting: {e}")
+                        LogUtils.w(self.tag, f"Connection error, resetting: {e}")
                         self.reset()
-                        # 如果是ConnectLan实例，调用connect_lan
+                        # 重新连接
                         if hasattr(self, 'connect_lan'):
                             self.connect_lan()
-                        # 否则调用connect
                         else:
                             self.connect()
-                            LogUtils.i(self.tag,f"Calling connect()")
             # 使用线程池执行发送任务，避免线程泄漏
             DefaultThreadPool.get_instance().execute(send_task)
         else:
-            LogUtils.i(self.tag,f"Socket not ready or not connected, resetting")
-            self.reset()
-            # 如果是ConnectLan实例，调用connect_lan
-            if hasattr(self, 'connect_lan'):
-                self.connect_lan()
-            # 否则调用connect
-            else:
-                self.connect()
+            LogUtils.i(self.tag, "Socket not ready or not connected, resetting")
+            # 未连接时同步 reset() 会 join/退避阻塞调用方(事件循环)——
+            # 全部放到线程池,保证调用方(scoket 发送请求)不被卡住
+            def reset_task():
+                self.reset()
+                if hasattr(self, 'connect_lan'):
+                    self.connect_lan()
+                else:
+                    self.connect()
+            DefaultThreadPool.get_instance().execute(reset_task)
 
     def send_heartbeat(self, data: bytes):
         if self.get_connect_state() == ConnectState.NONE:
@@ -494,14 +525,10 @@ class BaseConnect:
                 try:
                     self.r_heartbeat()
                 except Exception as e:
-                    LogUtils.d(self.tag,f" Heartbeat task error: {e}")
-                # 每次循环都检查是否需要停止
-                # for i in range(int(self.heartbeat_interval * 10)):
-                #     if not self.m_recv_data_running or self.scheduled_executor.finished.is_set():
-                #         break
-                #     time.sleep(0.1)
-                time.sleep(self.heartbeat_interval)
-            LogUtils.d(self.tag,f" 💥 stoped heartbeat_task ")
+                    LogUtils.d(self.tag, f" Heartbeat task error: {e}")
+                # 用事件等待替代 time.sleep,停止信号可即时中断
+                self.scheduled_executor.finished.wait(self.heartbeat_interval)
+            LogUtils.d(self.tag, " 💥 stoped heartbeat_task ")
 
         # 双重检查，确保不会重复创建
         if not self.scheduled_executor or self.scheduled_executor.finished.is_set():
@@ -544,7 +571,7 @@ class BaseConnect:
             self.recv_data_executor.finished.set()
             
             # 2. 设置m_recv_data_running为False
-            with threading.Lock():
+            with self.recv_lock:
                 self.m_recv_data_running = False
             
             # 3. 关闭socket，唤醒阻塞的recv()调用

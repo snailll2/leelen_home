@@ -95,51 +95,49 @@ class _WorkerThread(threading.Thread):
         """线程主循环，处理任务"""
         LogUtils.d(f"Worker thread {self.name} started")
         while self._is_running:
+            task_data = None
             try:
                 # 获取任务，超时检查是否需要退出
                 task_data = self._task_queue.get(timeout=0.1)
                 if task_data is None:
                     # 收到退出信号
-                    self._task_queue.task_done()
                     break
 
                 self._current_task, self._current_future = task_data
-                
+
                 # 检查任务是否已取消
                 if self._current_future.cancelled():
                     LogUtils.d(f"Task {self._current_future._task_id} already cancelled")
-                    self._task_queue.task_done()
                     continue
 
-                # 执行任务 - 这里需要处理可中断的情况
-                # 由于Python的GIL限制，我们无法强制中断正在运行的线程
-                # 但我们可以定期检查任务是否被取消
+                # 执行任务 - 由于Python的GIL限制无法强制中断运行中的线程,
+                # 但可在任务执行后检查取消状态
                 try:
                     result = self._current_task()
-                    # 检查任务是否在执行过程中被取消
                     if not self._current_future.cancelled():
                         self._current_future.set_result(result)
                 except Exception as e:
-                    # 检查任务是否在执行过程中被取消
                     if not self._current_future.cancelled():
                         self._current_future.set_exception(e)
-                    raise
-                
+                    # 记录任务异常,但不再重复 raise(外层 except 只会再记录一次)
+                    LogUtils.e(f"Task error in worker {self.name}: {e}")
+
             except queue.Empty:
-                # 检查是否需要退出
+                # 等待超时,继续循环
                 continue
             except Exception as e:
-                # 记录异常
                 if self._current_future and not self._current_future.done():
                     self._current_future.set_exception(e)
                 LogUtils.e(f"Error in worker thread {self.name}: {e}")
             finally:
+                # 每个 get() 只调用一次 task_done(),避免把 unfinished 打成负数抛 ValueError
+                if task_data is not None:
+                    try:
+                        self._task_queue.task_done()
+                    except ValueError:
+                        pass
                 self._current_task = None
                 self._current_future = None
-                try:
-                    self._task_queue.task_done()
-                except Exception:
-                    pass
         LogUtils.d(f"Worker thread {self.name} exited")
 
     def terminate(self) -> bool:
@@ -155,7 +153,7 @@ class DefaultThreadPool:
     _instance = None
     _lock = threading.Lock()
 
-    BLOCKING_QUEUE_SIZE = 20
+    BLOCKING_QUEUE_SIZE = 100
 
     def __init__(self):
         cpu_count = os.cpu_count()
@@ -259,38 +257,35 @@ class DefaultThreadPool:
     def shutdown(self) -> None:
         """安全关闭线程池，等待队列中的任务完成"""
         self._is_running = False
-        
+
         # 等待所有任务完成
         self._task_queue.join()
-        
-        # 停止所有工作线程
-        for worker in self._workers.values():
-            worker.terminate()
-        
-        # 等待所有工作线程退出
-        # for worker in self._workers.values():
-        #     worker.join(timeout=1.0)
-        
+
+        # 停止所有工作线程并等待其退出(有界超时,避免挂死)
+        self._join_all_workers()
+
         self._workers.clear()
         LogUtils.d("ThreadPool shutdown completed")
 
     def shutdown_now(self) -> None:
         """立即关闭线程池，终止所有正在运行的任务并清空队列"""
         self._is_running = False
-        
+
         # 清空队列
         self.clear_queue()
-        
-        # 终止所有工作线程
-        for worker in self._workers.values():
-            worker.terminate()
-        
-        # 等待所有工作线程退出
-        # for worker in self._workers.values():
-        #     worker.join(timeout=0.5)
-        
+
+        # 终止所有工作线程并等待其退出(有界超时,避免挂死)
+        self._join_all_workers()
+
         self._workers.clear()
         LogUtils.d("ThreadPool shutdown now completed")
+
+    def _join_all_workers(self) -> None:
+        """终止所有工作线程并有界 join,确保线程真正退出"""
+        for worker in self._workers.values():
+            worker.terminate()
+        for worker in self._workers.values():
+            worker.join(timeout=1.0)
 
     def shutdown_right_now(self) -> None:
         """立即关闭线程池（旧方法保留兼容性）"""

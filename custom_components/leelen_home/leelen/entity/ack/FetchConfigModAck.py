@@ -23,7 +23,7 @@ class FetchConfigModAck(BaseAck):
             cont_type=data.get("cont_type", ""),
             num_left=data.get("num_left", 0),
             tbl=data.get("tbl", ""),
-            type_=data.get("type", "")
+            type=data.get("type", "")
         )
 
     def to_dict(self):

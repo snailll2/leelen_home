@@ -144,9 +144,11 @@ class BaseLanProtocol:
                 buffer.extend(self.device_dest)
                 buffer.extend(self.cmd)
 
-                self.frame_id = ConvertUtils.to_bytes(self.get_frame_id())
+                # 固定按 4 字节写入 frame_id(小端).原为 to_bytes + 手动补 2 字节,
+                # 当 frame_id >= 32768 时 to_bytes 会返回 4 字节,再补 2 字节导致帧头溢出、解析错位。
+                frame_id = self.get_frame_id()
+                self.frame_id = frame_id.to_bytes(4, 'little')
                 buffer.extend(self.frame_id)
-                buffer.extend(bytes([0, 0]))
 
                 # buffer.extend(bytes([63, 0, 0, 0]))
 

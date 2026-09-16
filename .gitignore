@@ -38,3 +38,18 @@ Thumbs.db
 
 # Project specific
 OPTIMIZATION_SUMMARY.md
+
+# HA runtime junk from Docker bind mount (container /config)
+.HA_VERSION
+.ha_run.lock
+.storage/
+.cache/
+home-assistant*.log
+home-assistant.log.*
+home-assistant_v2.db*
+configuration.yaml
+automations.yaml
+scenes.yaml
+scripts.yaml
+secrets.yaml
+blueprints/

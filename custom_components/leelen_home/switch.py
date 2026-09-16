@@ -19,9 +19,10 @@ from homeassistant.helpers.event import async_track_state_change
 
 from . import LogUtils
 from .const import DOMAIN, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES
-from .leelen.common.LeelenType import *
+from .leelen.common.LeelenType import FunctionType, FunctionValue, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinBaseState import LinBaseState
+from .state_subscription import StateUpdateSubscriber
 
 # from .miot.miot_spec import MIoTSpecProperty
 # from .miot.miot_device import MIoTDevice, MIoTEntityData,  MIoTServiceEntity
@@ -58,6 +59,8 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                     entity.set_linked_entity(linked_entities[entity.unique_id])
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
                 entities.append(entity)
+    for entity in entities:
+        entity.subscribe_state_updates(hass)
     async_add_entities(entities)
 
     for entity in entities:
@@ -77,10 +80,13 @@ async def async_setup_entry(
     async def handle_refresh():
         await setup_devices_from_db(hass, config_entry, async_add_entities)
 
-    async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    # 保存 unsub,卸载时注销,避免 refresh 重复创建实体
+    config_entry.async_on_unload(
+        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    )
 
 
-class Switch(SwitchEntity):
+class Switch(StateUpdateSubscriber, SwitchEntity):
     """Light entities for Xiaomi Home."""
     # pylint: disable=unused-argument
     _VALUE_RANGE_MODE_COUNT_MAX = 30
@@ -193,7 +199,7 @@ class VSwitch(Switch):
                     {"entity_id": self._linked_entity_id},
                     blocking=False
                 )
-            self._last_sync_time = time.time()
+            self._last_sync_time = _monotonic()
         finally:
             self._is_syncing = False
 
@@ -264,10 +270,21 @@ class VSwitch(Switch):
             LogUtils.d(f"💡 {self._name} update skipped during sync")
             return
         LogUtils.d(f"💡 {self._name} update {state}")
-        if state.get_service_type() in [FunctionType.FUNCTION_ARM, FunctionType.FUNCTION_ARM_CONDITION]:
-            # self._prop_on = state.power_state == 1
-            self._prop_on = False if self._prop_on else True
-            # await self.async_toggle()
+        if state.get_service_type() in [
+            FunctionType.FUNCTION_ARM,
+            FunctionType.FUNCTION_ARM_CONDITION
+        ]:
+            # ARM(开启)/ARM_CONDITION(关闭) 是设备上报的可解析状态来源;
+            # 原实现只在有 linked_entity 时才更新,导致无联动时 VSwitch 状态永不刷新。
+            # 现在以设备上报为准(power_state 1=开,2=关,见 get_v_switch_state)。
+            if state.power_state in (1, 2):
+                self._prop_on = state.power_state == 1
+
+            # 有 linked entity 时,以其当前状态为准覆盖设备上报(保留原覆盖逻辑)
+            if self._linked_entity_id:
+                linked_state = self.hass.states.get(self._linked_entity_id)
+                if linked_state is not None:
+                    self._prop_on = linked_state.state == "on"
+
         self.async_write_ha_state()
-        if not self._is_syncing:
-            await self._sync_linked_entity_state(self._prop_on)
+        await self._sync_linked_entity_state(self._prop_on)

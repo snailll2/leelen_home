@@ -34,6 +34,8 @@ class BaseWanProtocol:
         self.session_id = None
         self.source = None
         self.tail_length = 3
+        # 单例子类(如 PassThroughWanProtocol)在并发发请求时会复用同一实例,需要一个真实实例锁
+        self._lock = threading.Lock()
 
     @classmethod
     def get_seq(cls) -> int:
@@ -110,12 +112,12 @@ class BaseWanProtocol:
             return None
 
     def build_body(self) -> bool:
-        with threading.Lock():
+        with self._lock:
             self.request_data_body = bytes()
             return True
 
     def build_head(self, source: bytes, dest: bytes) -> bool:
-        with threading.Lock():
+        with self._lock:
             try:
                 self.source = source
                 self.dest = dest
@@ -168,10 +170,8 @@ class BaseWanProtocol:
         return bytes(buffer)
 
     def _get_check_byte(self, *byte_arrays: bytes) -> int:
-        total = 0
-        for byte_array in byte_arrays:
-            total += sum(byte_array)
-        return (-total) & 0xFF
+        # 与 get_check_byte 逻辑完全相同,统一走后者。
+        return self.get_check_byte(*byte_arrays)
 
     def get_cmd(self) -> bytes:
         return self.cmd

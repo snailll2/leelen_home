@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -18,8 +18,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import LogUtils
 from .const import DOMAIN
-from .leelen.common.LeelenType import *
+from .leelen.common.LeelenType import LogicDeviceType
 from .leelen.states.LinSensorState import LinSensorState
+from .state_subscription import StateUpdateSubscriber
 
 # from .miot.miot_spec import MIoTSpecProperty
 # from .miot.miot_device import MIoTDevice, MIoTEntityData,  MIoTServiceEntity
@@ -49,7 +50,7 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                                 logic_srv.get("dev_addr"),
                                 logic_srv.get("logic_name"),
                                 device_info.get("dev_name"),
-                                "temperature",
+                                SensorDeviceClass.TEMPERATURE,
                                 "°C",
                                 config_entry)
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
@@ -60,7 +61,7 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                                 logic_srv.get("dev_addr"),
                                 logic_srv.get("logic_name"),
                                 device_info.get("dev_name"),
-                                "pm25",
+                                SensorDeviceClass.PM25,
                                 "µg/m³",
                                 config_entry)
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
@@ -71,7 +72,7 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                                 logic_srv.get("dev_addr"),
                                 logic_srv.get("logic_name"),
                                 device_info.get("dev_name"),
-                                "humidity",
+                                SensorDeviceClass.HUMIDITY,
                                 "%",
                                 config_entry)
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
@@ -82,7 +83,7 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                                 logic_srv.get("dev_addr"),
                                 logic_srv.get("logic_name"),
                                 device_info.get("dev_name"),
-                                "door",
+                                BinarySensorDeviceClass.DOOR,
                                 config_entry)
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
                 entities.append(entity)
@@ -92,11 +93,14 @@ async def setup_devices_from_db(hass, config_entry, async_add_entities):
                                 logic_srv.get("dev_addr"),
                                 logic_srv.get("logic_name"),
                                 device_info.get("dev_name"),
-                                "moisture",
+                                BinarySensorDeviceClass.MOISTURE,
                                 config_entry)
                 hass.data[DOMAIN]["entities"][entity.unique_id] = entity
                 entities.append(entity)
         
+    # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)
+    for entity in entities:
+        entity.subscribe_state_updates(hass)
     # 添加实体到 HA
     async_add_entities(entities)
 
@@ -113,12 +117,13 @@ async def async_setup_entry(
     async def handle_refresh():
         await setup_devices_from_db(hass, config_entry, async_add_entities)
 
-    async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    # 保存 unsub,卸载时注销
+    config_entry.async_on_unload(
+        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
+    )
 
 
-class Sensor(SensorEntity):
-
-    _attr_has_entity_name = True  # 推荐启用以符合最新命名规范
+class Sensor(StateUpdateSubscriber, SensorEntity):
 
     def __init__(self, logic_addr, device_id: str, name: str, dev_name: str,device_class,unit_of_measurement, config_entry: ConfigEntry):
         """Initialize the Light."""
@@ -162,9 +167,7 @@ class Sensor(SensorEntity):
         
 
 
-class BinarySensor(BinarySensorEntity):
-
-    _attr_has_entity_name = True  # 推荐启用以符合最新命名规范
+class BinarySensor(StateUpdateSubscriber, BinarySensorEntity):
 
     def __init__(self, logic_addr, device_id: str, name: str, dev_name: str,device_class, config_entry: ConfigEntry):
         """Initialize the Light."""
@@ -203,6 +206,8 @@ class BinarySensor(BinarySensorEntity):
     async def update_state(self, state: LinSensorState):
         # LogUtils.d(f"🧯 {self._name} update {state}")
         if isinstance(state, LinSensorState):
+            # 二进制传感器(门磁/水浸)的含义:设备上报值 0 表示「触发/门开」。
+            # 若门磁/水浸实体在真机上方向相反(门开显示为关),需把 O 判定取反 —— 待真机验证。
             self._prop_on = state.get_value() == 0
 
 

@@ -1,84 +1,17 @@
-import threading
+"""HA 原生状态事件派发入口(原自定义事件总线)。
+
+原 FlowRxBus 是一个持有 ``hass`` 单例事件总线,reload 后残留问题明显。
+已重构为无状态模块:后台线程(收包线程)调用 ``post(event)`` 把设备状态事件
+经 ``hass.loop.call_soon_threadsafe`` 送入 HA 原生 ``async_dispatcher_send``。
+
+实体侧的订阅由各平台混入的 ``StateUpdateSubscriber`` 完成(见 state_subscription.py),
+本模块不再保存单例或 hass,事件总线不再有全局状态。
+"""
 
 from ..HeartbeatService import HeartbeatService
-from ..common import FunctionValue
-from ..common.CommonModel import CommonModel
-from ..handler.DeviceStatusEvent import DeviceStatusEvent
-from ..utils.ConvertUtils import ConvertUtils
-from ..utils.LogUtils import LogUtils
-from ..common.LeelenType import *
+from ...state_subscription import post_state_update
 
-class FlowRxBus:
-    MSG_TYPE_LOGON_TIMEOUT = 3
-    SOURCE_DEST_LENGTH = 8
-    _instance = None
-    _lock = threading.Lock()
-    TAG = "🍅 FlowRxBus"
-
-    def __init__(self):
-        self._hass = None
-        self.device_list = []
-
-    @classmethod
-    def get_instance(cls) -> 'FlowRxBus':
-        with cls._lock:
-            if not cls._instance:
-                cls._instance = FlowRxBus()
-            return cls._instance
-
-    #
-    # def get_hass_service_by_function_id(self, function_id, function_value):
-    #     if function_id == FunctionType.FUNCTION_ON_OFF:
-    #         if function_value == FunctionValue.VALUE_OFF:
-    #             return SERVICE_TURN_OFF, {}
-    #         if function_value == FunctionValue.VALUE_ON:
-    #             return SERVICE_TURN_ON, {}
-
-
-
-    def post(self, event: DeviceStatusEvent):
-
-        logic_address = event.logic_address
-        function_name = ""
-        logic_name = ""
-        # for device in self.device_list:
-        #     if device["logic_addr"] == event.logic_address:
-        #         # LogUtils.d(device["logic_name"])
-        #         logic_name = device["logic_name"]
-
-        # for function_value_name, function_value in FunctionValue.__dict__.items():
-        #     if event.state == function_value:
-        #         LogUtils.d(
-        #             f"{self.TAG}: 更新指定逻辑地址的状态，logicAddress = {logic_address} {logic_name}；functionId = {event.function_id} {function_name};var3 = {event.state.hex()} {function_value_name}")
-
-        for function_type_name, function_type_id in FunctionType.__dict__.items():
-            if function_type_id == event.function_id:
-                function_name = function_type_name
-                break
-        # LogUtils.d(
-        #     f"{self.TAG}: 更新指定逻辑地址的状态，logicAddress = {logic_address}；functionId = {event.function_id} {function_type_name}；var3 = {event.state.hex()}")
-
-        self._hass = HeartbeatService.get_instance().hass
-
-        async def async_operation(logic_address, event):
-            # service, service_data = self.get_hass_service_by_function_id(event.function_id, event.state)
-            # service_data.update({ATTR_ENTITY_ID: f"leelen_logic_addr_{logic_address}"})
-            # await self._hass.services.async_call(
-            #     domain=DOMAIN, service=service, service_data=service_data
-            # )
-            from ... import DOMAIN
-            unique_id = f"leelen_logic_addr_{logic_address}"
-            entity = self._hass.data[DOMAIN]["entities"].get(unique_id)
-            state = CommonModel.get_instance().get_cur_state(logic_address, event.function_id, event.state)
-            state.set_service_type(event.function_id)
-            state.set_service_address(logic_address)
-            if entity:
-                LogUtils.i(self.TAG,f"found entity {entity._name} {entity._device_name} {entity.entity_id} {entity.unique_id} {function_name} {state.__dict__} ")
-                await entity.update_state(state)
-                entity.async_write_ha_state()
-            else:
-                LogUtils.w(self.TAG,f"entity {unique_id} {function_name} not found ")
-
-        
-        if self._hass:
-            self._hass.add_job(async_operation, logic_address, event)
+#: 保留旧名称,供心跳/收包线程按原逻辑调用;内部委托给 HA dispatcher。
+def post(event) -> None:
+    hass = HeartbeatService.get_instance().hass
+    post_state_update(hass, event)
