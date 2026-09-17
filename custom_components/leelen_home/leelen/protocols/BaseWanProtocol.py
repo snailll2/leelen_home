@@ -6,7 +6,6 @@ from ..common import ProtocolDefault
 from ..utils.ConvertUtils import ConvertUtils
 from ..utils.LogUtils import LogUtils
 
-
 class BaseWanProtocol:
     LENGTH_MIN = 36
     TAG = "BaseWanProtocol"
@@ -172,12 +171,6 @@ class BaseWanProtocol:
     def _get_check_byte(self, *byte_arrays: bytes) -> int:
         # 与 get_check_byte 逻辑完全相同,统一走后者。
         return self.get_check_byte(*byte_arrays)
-
-    def get_cmd(self) -> bytes:
-        return self.cmd
-
-    def get_request_data_body(self) -> bytes:
-        return self.request_data_body
 
     def get_ascii_password(self, password: str) -> bytes:
         """

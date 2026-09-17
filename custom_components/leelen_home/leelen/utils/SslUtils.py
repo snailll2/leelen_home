@@ -14,7 +14,6 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 from .ConvertUtils import ConvertUtils
 from .LogUtils import LogUtils
 
-
 #
 # def load_bks_ca(bks_path: str, password: str) -> str:
 #     ks = jks.bks.BksKeyStore.load(bks_path, password)
@@ -227,20 +226,3 @@ class SslUtils:
             LogUtils.d(f"[{SslUtils.TAG}] get_lan_socket_ssl_context() exception: {e}")
             raise
 
-    @staticmethod
-    def get_no_verifier_https_socket_factory() -> ssl.SSLContext:
-        """Creates an SSL context that doesn't verify certificates (INSECURE - for testing only)"""
-        try:
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-            return context
-        except Exception as e:
-            logging.error(f"{SslUtils.TAG}: Error creating no-verifier SSL context: {str(e)}")
-            raise RuntimeError("Failed to create no-verifier SSL context") from e
-
-
-class SslParams:
-    def __init__(self):
-        self.ssl_socket_factory = None
-        self.trust_manager = None

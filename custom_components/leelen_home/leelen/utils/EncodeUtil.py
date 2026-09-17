@@ -9,7 +9,6 @@ from .LogUtils import LogUtils
 HEX_DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
               'a', 'b', 'c', 'd', 'e', 'f']
 
-
 class EncodeUtil:
 
     @staticmethod
@@ -28,23 +27,6 @@ class EncodeUtil:
         except Exception as e:
             LogUtils.e(f"MD5 Error: {e}")
             return input_data if isinstance(input_data, str) else None
-
-    @staticmethod
-    def get_md5_hmac(message: str, key: str) -> str:
-        """
-        Compute HMAC-MD5 of message with key
-        Returns hex string
-        """
-        try:
-            hmac_md5 = hmac.new(
-                key.encode('utf-8'),
-                message.encode('utf-8'),
-                hashlib.md5
-            )
-            return hmac_md5.hexdigest()
-        except Exception as e:
-            LogUtils.e(f"HMAC-MD5 Error: {e}")
-            return ""
 
     @staticmethod
     def int_to_hex(value: int) -> str:
@@ -70,35 +52,6 @@ class EncodeUtil:
     def to_hex_string(byte_data: bytes) -> str:
         """Convert bytes to hex string"""
         return ''.join([f"{b:02x}" for b in byte_data])
-
-    @staticmethod
-    def url_encode_unicode(s: Optional[str]) -> Optional[str]:
-        """
-        URL-encode a string with Unicode support
-        Similar to JavaScript's encodeURIComponent()
-        """
-        if s is None:
-            return None
-
-        result = []
-        for char in s:
-            cp = ord(char)
-            if cp <= 0x7F:  # ASCII
-                if EncodeUtil.is_safe(char):
-                    result.append(char)
-                elif char == ' ':
-                    result.append('+')
-                else:
-                    result.append('%')
-                    result.append(EncodeUtil.int_to_hex((cp >> 4) & 0xF))
-                    result.append(EncodeUtil.int_to_hex(cp & 0xF))
-            else:  # Unicode
-                result.append('%u')
-                result.append(EncodeUtil.int_to_hex((cp >> 12) & 0xF))
-                result.append(EncodeUtil.int_to_hex((cp >> 8) & 0xF))
-                result.append(EncodeUtil.int_to_hex((cp >> 4) & 0xF))
-                result.append(EncodeUtil.int_to_hex(cp & 0xF))
-        return ''.join(result)
 
     @staticmethod
     def get_secret(num: int) -> str:

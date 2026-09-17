@@ -9,7 +9,6 @@ _LOGGER = logging.getLogger(__name__)
 
 OUT_LINE = "--"
 
-
 class DeviceStateModel(SingletonMixin):
     def __init__(self):
         self._state_map: Dict[int, int] = {}
@@ -17,10 +16,6 @@ class DeviceStateModel(SingletonMixin):
     def add_or_update_device_state(self, address: int, state: int):
         _LOGGER.info(f"添加或更新设备状态，address = {address}；state = {state}")
         self._state_map[address] = state
-
-    def delete_device_states(self):
-        _LOGGER.info("删除当前网关所有物理设备状态")
-        self._state_map.clear()
 
     def get_device_state_by_address(self, address: int) -> int:
         return self._state_map.get(address, 0)
@@ -38,7 +33,7 @@ class DeviceStateModel(SingletonMixin):
             return ConvertUtils.to_int(data)
 
         return OUT_LINE
-        
+
     def get_power_state(self, device_addr: int, logic_addr: int, data, func_id: int = 0):
         if data:
             return ConvertUtils.to_int(data)
@@ -94,10 +89,6 @@ class DeviceStateModel(SingletonMixin):
                 return Decimal(temp_val).quantize(Decimal('0.0'), rounding=ROUND_HALF_UP)
 
         return OUT_LINE
-
-    def update_device_state_by_address(self, device_addr: int, state: int):
-        _LOGGER.info(f"更新设备状态，deviceAddress = {device_addr}；state = {state}")
-        self._state_map[device_addr] = state
 
         # event = DeviceStatusUpdateEvent()
         # event.device_address = device_addr

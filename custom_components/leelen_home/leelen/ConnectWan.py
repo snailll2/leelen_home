@@ -15,7 +15,6 @@ from .utils.ConvertUtils import ConvertUtils
 from .utils.DataPkgUtils import DataPkgUtils
 from .utils.LogUtils import LogUtils
 
-
 class ConnectWan(SingletonMixin, BaseConnect):
     MSG_TYPE_LOGON_TIMEOUT = 3
     SOURCE_DEST_LENGTH = 8
@@ -201,9 +200,6 @@ class ConnectWan(SingletonMixin, BaseConnect):
     def on_server_host_empty(self) -> None:
         LogUtils.i(self.tag, "onServerHostEmpty")
 
-    def reset_wan(self) -> None:
-        #
-        self.reset()
         # DefaultThreadPool.get_instance().execute(lambda: self.reset())
 
     def send_heartbeat(self, data: bytes) -> None:

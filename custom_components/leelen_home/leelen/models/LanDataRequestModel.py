@@ -19,7 +19,6 @@ from ..utils.ConvertUtils import ConvertUtils
 from ..utils.EncodeUtil import EncodeUtil
 from ..utils.LogUtils import LogUtils
 
-
 class LanDataRequestModel(SingletonMixin):
     TAG = "LanDataRequestModel"
     _lock = Lock()
@@ -126,15 +125,6 @@ class LanDataRequestModel(SingletonMixin):
             except Exception as e:
                 logging.error(f"Error in request_config_fetch_list: {e}")
 
-    def request_config_lock(self, lock):
-        lock_req = ConfigLockReq()
-
-        if lock:
-            lock_req.time = 100
-            lock_req.op = 0
-        else:
-            lock_req.time = 600
-            lock_req.op = 1
         #
         # lock_protocol = ConfigLockLanProtocol.get_instance()
         # lock_protocol.set_config_lock_req(lock_req)

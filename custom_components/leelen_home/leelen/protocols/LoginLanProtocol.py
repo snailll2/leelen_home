@@ -4,7 +4,6 @@ from ..common import LanProtocolCmd
 from ..entity.ack.LoginAck import LoginAck
 from ..protocols.BaseLanProtocol import BaseLanProtocol
 
-
 class LoginLanProtocol(BaseLanProtocol):
 
     def __init__(self):
@@ -17,9 +16,6 @@ class LoginLanProtocol(BaseLanProtocol):
             return False
         self.request_data_body = json.dumps(self._login_req.to_dict()).replace(" ", "").encode()
         return True
-
-    def get_login_lan_ack(self, protocol):
-        return LoginAck(**json.loads(protocol.request_data_body))
 
     def set_login_req(self, login_req):
         self._login_req = login_req

@@ -5,7 +5,6 @@ from ..handler import FlowRxBus
 from ..common.SingletonMixin import SingletonMixin
 from ..utils.LogUtils import LogUtils
 
-
 class LogicServerStateModel(SingletonMixin):
     TAG = "🍋 LogicServerStateModel"
 
@@ -16,12 +15,6 @@ class LogicServerStateModel(SingletonMixin):
     def add_or_update_state(self, logic_address: int, state_dict: dict[int, bytes]):
         LogUtils.i(self.TAG, f"添加或更新逻辑设备状态，address = {logic_address} {state_dict}")
         self.state_array[logic_address] = state_dict
-
-    def delete_logic_server_state(self, logic_address):
-        LogUtils.d(f"{self.TAG}: 删除单条逻辑服务状态，logicAddress = {logic_address}")
-
-    def delete_logic_server_states(self):
-        LogUtils.d(f"{self.TAG}: 删除当前网关所有逻辑设备状态")
 
     def update_device_state_by_device_address(self, logic_address, function_id, state_bytes):
         LogUtils.i(self.TAG,

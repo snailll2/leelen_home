@@ -3,35 +3,8 @@ from typing import List, Optional, Union
 
 from .LogUtils import LogUtils
 
-
 class ConvertUtils:
     DEFAULT_BYTEORDER = 'little'
-
-    @staticmethod
-    def byte_array_to_gbk_string(byte_array: bytes) -> str:
-        try:
-            return byte_array.decode('gbk')
-        except UnicodeDecodeError:
-            return ""
-
-    @staticmethod
-    def byte_array_to_iso_string(byte_array: bytes) -> str:
-        try:
-            return byte_array.decode('iso-8859-1')
-        except UnicodeDecodeError:
-            return ""
-
-    @staticmethod
-    def byte_array_to_mac(byte_array: bytes) -> str:
-        if len(byte_array) < 6:
-            return ""
-
-        mac_parts = []
-        for i in range(6):
-            part = f"{byte_array[i]:02x}"
-            mac_parts.append(part)
-
-        return ":".join(mac_parts).upper()
 
     @staticmethod
     def byte_array_to_utf8_string(byte_array: bytes) -> str:
@@ -41,49 +14,34 @@ class ConvertUtils:
             return ""
 
     @staticmethod
-    def byte_to_bcd(byte_array: bytes) -> str:
-        result = []
-        for byte in byte_array:
-            result.append(str((byte & 0xF0) >> 4))
-            result.append(str(byte & 0x0F))
-
-        bcd_str = "".join(result)
-        return bcd_str[1:] if bcd_str.startswith("0") else bcd_str
-
-    @staticmethod
-    def bytes_to_hex(byte_array: Optional[bytes], separator: str = '') -> str:
-        if byte_array is None:
-            return ""
-        return separator.join(f"{byte:02x}" for byte in byte_array)
-
-    @staticmethod
-    def bytes_to_hex_string(byte_array: Optional[bytes]) -> str:
-        if byte_array is None or len(byte_array) == 0:
-            return None
-        return "".join(f"{byte:02x}" for byte in byte_array)
-
-    @staticmethod
     def bytes_to_ip(byte_array: bytes) -> str:
         return f"{byte_array[0]}.{byte_array[1]}.{byte_array[2]}.{byte_array[3]}"
-
-    @staticmethod
-    def bytes_to_ip_revert(byte_array: bytes) -> str:
-        return f"{byte_array[3]}.{byte_array[2]}.{byte_array[1]}.{byte_array[0]}"
 
     @staticmethod
     def bytes_to_mac(byte_array: bytes) -> str:
         return ":".join(f"{byte:02x}" for byte in byte_array)
 
     @staticmethod
-    def db_string2pro(string: str, length: int) -> bytes:
-        byte_array = bytearray(string.encode())
-        if len(byte_array) < length:
-            byte_array.extend([0xFF] * (length - len(byte_array)))
-        return bytes(byte_array[:length])
-
-    @staticmethod
     def get_32_bit_bin_string(number: int) -> str:
         return f"{number:032b}"
+
+    @staticmethod
+    def get_unsigned_int(number: int) -> int:
+        return number & 0xFFFFFFFF
+
+    @staticmethod
+    def get_unsigned_short(number: int) -> int:
+        return number & 0xFFFF
+
+    @staticmethod
+    def sub_bytes(byte_array: bytes, start: int, length: int) -> bytes:
+        return byte_array[start:start + length]
+
+    @staticmethod
+    def bytes_to_hex(byte_array: Optional[bytes], separator: str = '') -> str:
+        if byte_array is None:
+            return ""
+        return separator.join(f"{byte:02x}" for byte in byte_array)
 
     @staticmethod
     def get_address_by_type(device_type: str, address: int, byteorder: str = DEFAULT_BYTEORDER) -> bytes:
@@ -109,10 +67,6 @@ class ConvertUtils:
         return bytes(reversed(buffer))
 
     @staticmethod
-    def get_int_string_bytes(string: str) -> bytes:
-        return bytes([ord(c) for c in string])
-
-    @staticmethod
     def get_long_address_by_type(device_type: bytes, value: int) -> bytes:
         if device_type is None or len(device_type) != 2:
             raise ValueError("parameter 'deviceType' invalid.")
@@ -125,36 +79,6 @@ class ConvertUtils:
         LogUtils.i("get_long_address_by_type", long_address.hex())
 
         return bytes(long_address)
-
-    @staticmethod
-    def get_simple_bin_string(number: int) -> str:
-        binary = bin(number)[2:]  # Remove '0b' prefix
-        return binary.lstrip('0') or '0'
-
-    @staticmethod
-    def get_unsigned_int(number: int) -> int:
-        return number & 0xFFFFFFFF
-
-    @staticmethod
-    def get_unsigned_short(number: int) -> int:
-        return number & 0xFFFF
-
-    @staticmethod
-    def hex2byte(hex_string: str) -> bytes:
-        parts = hex_string.split()
-        return bytes(int(part, 16) for part in parts)
-
-    @staticmethod
-    def hex_string_to_string(hex_string: str) -> str:
-        if not hex_string:
-            return None
-
-        hex_string = hex_string.replace(" ", "")
-        try:
-            byte_array = bytes.fromhex(hex_string)
-            return byte_array.decode('utf-8')
-        except Exception:
-            return hex_string
 
     # @staticmethod
     # def hex_to_bytes(hex_string: str, byteorder: str = DEFAULT_BYTEORDER) -> bytes:
@@ -191,34 +115,8 @@ class ConvertUtils:
         return ConvertUtils.hex_to_bytes(hex_str, byte_order)
 
     @staticmethod
-    def hex_to_int(chars: List[str]) -> int:
-        result = 0
-        for char in chars:
-            if 'A' <= char <= 'F':
-                value = ord(char) - ord('A') + 10
-            elif 'a' <= char <= 'f':
-                value = ord(char) - ord('a') + 10
-            else:
-                value = int(char)
-            result = result * 16 + value
-        return result
-
-    @staticmethod
     def int_to_little_byte_array(number: int) -> bytes:
         return number.to_bytes(4, 'little')
-
-    @staticmethod
-    def ip_to_bytes(ip_string: str) -> bytes:
-        try:
-            parts = list(map(int, ip_string.split('.')))
-            return bytes([parts[3], parts[2], parts[1], parts[0]])
-        except Exception:
-            raise ValueError(f"{ip_string} is invalid IP")
-
-    @staticmethod
-    def print_byte_arr(tag: str, description: str, byte_array: bytes):
-        hex_str = ConvertUtils.bytes_to_hex(byte_array, ' ')
-        LogUtils.d(f"{tag}: {description}({len(byte_array)}) {hex_str}")
 
     @staticmethod
     def reverse(byte_array: bytes) -> bytes:
@@ -227,19 +125,6 @@ class ConvertUtils:
     @staticmethod
     def short_to_little_byte_array(number: int) -> bytes:
         return number.to_bytes(2, 'little')
-
-    @staticmethod
-    def str2bcd(string: str) -> bytes:
-        if len(string) % 2 != 0:
-            string = '0' + string
-
-        result = bytearray()
-        for i in range(0, len(string), 2):
-            high = int(string[i])
-            low = int(string[i + 1])
-            result.append((high << 4) | low)
-
-        return bytes(result)
 
     # @staticmethod
     # def sub_byte(byte_val: int, start: int, end: int) -> int:
@@ -256,10 +141,6 @@ class ConvertUtils:
         return (unsigned_b >> i) & mask
 
     @staticmethod
-    def sub_bytes(byte_array: bytes, start: int, length: int) -> bytes:
-        return byte_array[start:start + length]
-
-    @staticmethod
     def to_bytes(number: Union[int, float], byteorder: str = DEFAULT_BYTEORDER) -> bytes:
         if isinstance(number, int):
             if -32768 <= number <= 32767:  # short range
@@ -273,10 +154,6 @@ class ConvertUtils:
         raise TypeError("Unsupported type for conversion")
 
     @staticmethod
-    def to_bytes_big(number: int) -> bytes:
-        return ConvertUtils.to_bytes(number, 'big')
-
-    @staticmethod
     def to_hex_string(string: str) -> str:
         return " ".join(f"{ord(c):x}" for c in string)
 
@@ -287,10 +164,6 @@ class ConvertUtils:
     @staticmethod
     def to_long(byte_array: bytes, byteorder: str = DEFAULT_BYTEORDER) -> int:
         return int.from_bytes(byte_array, byteorder)
-
-    @staticmethod
-    def to_lower(string: str) -> str:
-        return string.lower()
 
     @staticmethod
     def to_short(byte_array: bytes, byteorder: str = DEFAULT_BYTEORDER) -> int:

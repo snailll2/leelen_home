@@ -3,7 +3,6 @@ from .common.SingletonMixin import SingletonMixin
 from .entity.User import User
 from .utils.LogUtils import LogUtils
 
-
 class HeartbeatService(SingletonMixin):
     MSG_TYPE_KEEP_ALIVE = 1
     MSG_TYPE_HTTP_LOGON = 2
@@ -79,17 +78,6 @@ class HeartbeatService(SingletonMixin):
             self.connect_wan.close()
             self.connect_wan.open()
 
-    def wan_conn_reopen(self):
-        LogUtils.i("wanConnReOpen")
-        if not self.connect_wan:
-            self.wan_conn_open()
-        else:
-            # 修复缺括号:原代码 is_project_account 恒真,导致重开 WAN 永不执行
-            if User.get_instance().is_project_account():
-                return
-            self.connect_wan.set_connect_state(ConnectState.NONE)
-            self.connect_wan.open()
-
     def is_service_destroy(self):
         return self._is_service_destroy
 
@@ -122,23 +110,6 @@ class HeartbeatService(SingletonMixin):
             # 释放单例,避免重载复用旧 socket/线程
             from .ConnectLan import ConnectLan
             ConnectLan.reset_instance()
-
-    def lan_conn_reopen(self):
-        LogUtils.i(self.TAG, "lanConnReOpen")
-        if not self.can_conn_lan():
-            LogUtils.w(self.TAG, "canConnLan return false, abort.")
-            return
-
-        if not self.connect_lan:
-            self.lan_conn_create(False)
-            self.connect_lan.set_connect_state(ConnectState.NONE)
-            self.connect_lan.open()
-        else:
-            if self.connect_lan.get_connect_state() == ConnectState.CONNECTED:
-                return
-            LogUtils.d(self.TAG, f"lanConnReOpen() connect lan state: {self.connect_lan.get_connect_state()}")
-            self.connect_lan.set_connect_state(ConnectState.NONE)
-            self.connect_lan.open()
 
     def create(self):
         HeartbeatService._instance = self

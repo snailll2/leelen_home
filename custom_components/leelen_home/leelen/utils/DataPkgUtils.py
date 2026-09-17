@@ -4,7 +4,6 @@ from ..protocols.BaseWanProtocol import BaseWanProtocol
 from ..utils.ConvertUtils import ConvertUtils
 from ..utils.LogUtils import LogUtils
 
-
 class DataPkgUtils:
     BYTEBUFFER_SIZE = 5242880
     BYTE_BUF_DOWNLOAD = bytearray(5242880)
@@ -18,33 +17,14 @@ class DataPkgUtils:
     used_wan = 0
 
     @staticmethod
-    def clear_download_data():
-        DataPkgUtils.BYTE_BUF_DOWNLOAD[0:] = bytearray(0)
-        DataPkgUtils.used_download = 0
-
-    @staticmethod
     def clear_lan_data():
         DataPkgUtils.BYTE_BUF_LAN[0:] = bytearray(0)
         DataPkgUtils.used_lan = 0
 
     @staticmethod
-    def clear_sub_lan_data():
-        DataPkgUtils.BYTE_BUF_SUB_LAN[0:] = bytearray(0)
-        DataPkgUtils.used_sub_lan = 0
-
-    @staticmethod
     def clear_wan_data():
         DataPkgUtils.BYTE_BUF_WAN[0:] = bytearray(0)
         DataPkgUtils.used_wan = 0
-
-    @staticmethod
-    def pull_download():
-        result = []
-        while True:
-            protocol = DataPkgUtils.pull_single_download()
-            if protocol is None:
-                return result
-            result.append(protocol)
 
     @staticmethod
     def pull_lan():
@@ -338,15 +318,6 @@ class DataPkgUtils:
             return None
 
     @staticmethod
-    def pull_sub_lan():
-        result = []
-        while True:
-            protocol = DataPkgUtils.pull_single_sub_lan()
-            if protocol is None:
-                return result
-            result.append(protocol)
-
-    @staticmethod
     def pull_wan():
         result = []
         while True:
@@ -354,19 +325,6 @@ class DataPkgUtils:
             if protocol is None:
                 return result
             result.append(protocol)
-
-    @staticmethod
-    def push_download(data):
-        if data is None:
-            LogUtils.w(DataPkgUtils.TAG, "no download data to push.")
-            return
-
-        if len(data) <= DataPkgUtils.BYTEBUFFER_SIZE:
-            if len(data) > DataPkgUtils.BYTEBUFFER_SIZE - DataPkgUtils.used_download:
-                DataPkgUtils.used_download = 0
-
-            DataPkgUtils.BYTE_BUF_DOWNLOAD[DataPkgUtils.used_download:DataPkgUtils.used_download + len(data)] = data
-            DataPkgUtils.used_download += len(data)
 
     @staticmethod
     def push_lan(data):
@@ -380,19 +338,6 @@ class DataPkgUtils:
 
             DataPkgUtils.BYTE_BUF_LAN[DataPkgUtils.used_lan:DataPkgUtils.used_lan + len(data)] = data
             DataPkgUtils.used_lan += len(data)
-
-    @staticmethod
-    def push_sub_lan(data):
-        if data is None:
-            LogUtils.w(DataPkgUtils.TAG, "no data to push.")
-            return
-
-        if len(data) <= DataPkgUtils.BYTEBUFFER_SIZE:
-            if len(data) > DataPkgUtils.BYTEBUFFER_SIZE - DataPkgUtils.used_sub_lan:
-                DataPkgUtils.used_sub_lan = 0
-
-            DataPkgUtils.BYTE_BUF_SUB_LAN[DataPkgUtils.used_sub_lan:DataPkgUtils.used_sub_lan + len(data)] = data
-            DataPkgUtils.used_sub_lan += len(data)
 
     @staticmethod
     def push_wan(data):

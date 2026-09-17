@@ -9,7 +9,6 @@ from Cryptodome.Util.Padding import pad, unpad
 from ..common.SingletonMixin import SingletonMixin
 from .LogUtils import LogUtils
 
-
 class AesCoder(SingletonMixin):
     ALGORITHMTYPE = "AES"
     CIPHER_MODE = "AES/CBC/NoPadding"
@@ -17,10 +16,6 @@ class AesCoder(SingletonMixin):
     KEY = "<aes@leelen.com>"
     KEY_BYTES = KEY.encode('utf-8')
     TAG = "AesCoder"
-
-    @staticmethod
-    def append_hex(string_buffer: str, byte: int) -> str:
-        return string_buffer + AesCoder.HEX[(byte >> 4) & 0x0F] + AesCoder.HEX[byte & 0x0F]
 
     @staticmethod
     def decrypt(encrypted_data: str, key: str) -> str:
@@ -74,10 +69,6 @@ class AesCoder(SingletonMixin):
         except Exception as e:
             LogUtils.d(f"{AesCoder.TAG} encrypt_log Exception: {str(e)}")
             return ""
-
-    @staticmethod
-    def from_hex(hex_str: str) -> str:
-        return AesCoder.to_byte(hex_str).decode('utf-8')
 
     @staticmethod
     def get_raw_key(seed: bytes) -> bytes:
@@ -169,10 +160,6 @@ class AesCoder(SingletonMixin):
     def to_byte(hex_str: str) -> bytes:
         length = len(hex_str) // 2
         return bytes(int(hex_str[i * 2:i * 2 + 2], 16) for i in range(length))
-
-    @staticmethod
-    def to_hex(data: str) -> str:
-        return AesCoder.to_hex_bytes(data.encode('utf-8'))
 
     @staticmethod
     def to_hex_bytes(data: bytes) -> str:
