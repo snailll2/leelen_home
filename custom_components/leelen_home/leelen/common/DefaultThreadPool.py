@@ -1,9 +1,6 @@
 import logging
-import os
 import queue
 import threading
-import time
-import traceback
 import uuid
 from typing import Optional, Callable, Dict
 
@@ -152,31 +149,30 @@ class _WorkerThread(threading.Thread):
 
 class DefaultThreadPool(SingletonMixin):
     BLOCKING_QUEUE_SIZE = 100
+    # 本集成是单网关低并发(发送帧/重连/心跳等短任务),固定小线程池即可。
+    # 按 os.cpu_count()(容器里是宿主机核数)会白白拉起十几个线程。
+    WORKER_COUNT = 4
 
     def __init__(self):
-        cpu_count = os.cpu_count()
-        self.THREAD_POOL_SIZE = cpu_count + 1
-        self.THREAD_POOL_MAX_SIZE = cpu_count * 2 + 1
-        
         # 生成随机字符串用于区分不同的线程池实例
         self._random_suffix = uuid.uuid4().hex[:8]
         self._pool_name = f"DefaultThreadPool_{self._random_suffix}"
 
         # 任务队列
         self._task_queue = queue.Queue(maxsize=self.BLOCKING_QUEUE_SIZE)
-        
+
         # 工作线程列表
         self._workers: Dict[str, _WorkerThread] = {}
         self._worker_count = 0
-        
+
         # 任务ID计数器
         self._task_counter = 0
-        
+
         # 线程池状态
         self._is_running = True
-        
+
         # 初始化工作线程
-        self._initialize_workers(self.THREAD_POOL_SIZE)
+        self._initialize_workers(self.WORKER_COUNT)
 
     def _initialize_workers(self, count: int) -> None:
         """初始化指定数量的工作线程"""
@@ -220,7 +216,6 @@ class DefaultThreadPool(SingletonMixin):
             LogUtils.w("Task queue is full, task rejected")
             return None
         except Exception as e:
-            traceback.print_exc()
             LogUtils.e(f"Error executing task: {e}")
             return None
 

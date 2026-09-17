@@ -58,6 +58,8 @@ class BaseConnect:
         self.pre_heartbeat_start_time = time.time()
         self.pre_heartbeat_send_time = -1
         self.connect_retry_count = 0
+        # close() 时 set:用于让退避 sleep 可中断(unload 后回魂重连防护)。
+        self._stop_event = threading.Event()
         self.show_log = True
         self.tag = "🍺 BaseConnect:"
         # 连接/发送超时(秒);无超时会在网关失联时挂死工作线程。
@@ -251,6 +253,8 @@ class BaseConnect:
 
     def close(self):
         """Teardown: stop all background threads and socket. Call on HA unload."""
+        # 先置停止标记:让还在退避 sleep 里的重置任务立即放弃重连,防止 unload 后回魂。
+        self._stop_event.set()
         self.m_recv_data_running = False
         self.stop_heartbeat()
         self.stop_connect_executor()
@@ -279,9 +283,10 @@ class BaseConnect:
 
     def connect(self):
         try:
-            if self.m_connecting_count >= self.MAX_CONNECTING_COUNT:
-                self.r_connect.stop()
-
+            # 并发守卫由 run.running 承担(同实例最多一条连接线程)。
+            # 不再用 m_connecting_count 撞 MAX_CONNECTING_COUNT 去 r_connect.stop():
+            # 那会关掉飞行中的健康 socket,让连接的线程走进 except/reset 分支自我重连,
+            # 计数又被下一次 connect 清零,该上限从未真正限流,只会制造额外的 socket churn。
             if self.r_connect.is_running():
                 self.m_connecting_count += 1
                 if self.show_log:
@@ -370,6 +375,11 @@ class BaseConnect:
 
     def reset(self):
         LogUtils.w(self.tag, "Reset connection")
+        # 关闭标记:unload(stop→close)已发生,还睡在退避里的重置任务/接收线程
+        # 不得再对已废弃的单例重连,否则每个 unload 后都会回魂一条活连接。
+        if self._stop_event.is_set():
+            LogUtils.i(self.tag, "connection closed, skip reset")
+            return
 
         # 1. 停止所有运行线程(含心跳,避免旧心跳继续驱动已关闭的 socket)
         self.m_recv_data_running = False
@@ -406,13 +416,18 @@ class BaseConnect:
 
         LogUtils.d(self.tag, "Reset completed, preparing to reconnect")
 
-        # 4. 指数退避重连,避免死网络下的重连风暴
+        # 4. 指数退避重连,避免死网络下的重连风暴。
+        # 用事件 wait 替代 time.sleep:close() 会 set _stop_event,退避可被
+        # unload 立即打断,而非 unload 之后还在池 worker 里沉睡再对废弃实例重连。
         max_delay = 60
         delay = min(max_delay, self.connect_retry_count * 2.0)
         self.connect_retry_count += 1
         LogUtils.i(self.tag, f"backoff {delay:.1f}s (retry #{self.connect_retry_count})")
         if delay > 0:
-            time.sleep(delay)
+            self._stop_event.wait(delay)
+        if self._stop_event.is_set():
+            LogUtils.i(self.tag, "backoff interrupted by close, skip reconnect")
+            return
 
         try:
             self.connect_lan()
@@ -451,7 +466,11 @@ class BaseConnect:
                         else:
                             self.connect()
             # 使用线程池执行发送任务，避免线程泄漏
-            DefaultThreadPool.get_instance().execute(send_task)
+            future = DefaultThreadPool.get_instance().execute(send_task)
+            if future is None:
+                # 入队被拒(queue full/已 shutdown):帧被丢弃,打 WARN 让运维可诊断,
+                # 不再静默丢失设备指令/心跳。
+                LogUtils.w(self.tag, "send task rejected by thread pool, packet dropped")
         else:
             LogUtils.i(self.tag, "Socket not ready or not connected, resetting")
             # 未连接时同步 reset() 会 join/退避阻塞调用方(事件循环)——
@@ -496,6 +515,10 @@ class BaseConnect:
         self.pre_heartbeat_recv = (state == LogonState.LOGGED_ON)
         if self.pre_heartbeat_recv:
             self.pre_heartbeat_recv_time = time.time()
+        if state == LogonState.LOGGED_ON:
+            # 登录成功即视为恢复健康:清掉重连计数,退避不再永久饱和在 60s,
+            # 下次故障会从快退避重新开始。
+            self.connect_retry_count = 0
 
     def start_heartbeat(self):
         self.heartbeat_data = self.create_heartbeat_data()
@@ -520,21 +543,26 @@ class BaseConnect:
                 LogUtils.d(self.tag,f" Join error: {e}")
         
         # 创建新的心跳线程
-        def heartbeat_task():
-            while not self.scheduled_executor.finished.is_set():
+        def heartbeat_task(my_finished):
+            # 绑定本线程自己的 finished 事件。若循环里每次重读 self.scheduled_executor,
+            # 心跳超时自我 reset 后旧线程会拿到新线程的(未 set)事件 → 旧线程永不退出,
+            # 每触发一次 30s 心跳超时重置就泄漏一个活心跳线程。绑定后旧线程退出自身循环。
+            while not my_finished.is_set():
                 try:
                     self.r_heartbeat()
                 except Exception as e:
                     LogUtils.d(self.tag, f" Heartbeat task error: {e}")
                 # 用事件等待替代 time.sleep,停止信号可即时中断
-                self.scheduled_executor.finished.wait(self.heartbeat_interval)
+                my_finished.wait(self.heartbeat_interval)
             LogUtils.d(self.tag, " 💥 stoped heartbeat_task ")
 
         # 双重检查，确保不会重复创建
         if not self.scheduled_executor or self.scheduled_executor.finished.is_set():
-            self.scheduled_executor = threading.Thread(target=heartbeat_task)
-            self.scheduled_executor.finished = threading.Event()
-            self.scheduled_executor.start()
+            finished = threading.Event()
+            executor = threading.Thread(target=heartbeat_task, args=(finished,))
+            executor.finished = finished
+            self.scheduled_executor = executor
+            executor.start()
             LogUtils.d(self.tag,f" 💥 heartbeat_task started ")
         else:
             LogUtils.d(self.tag,f" Heartbeat thread already exists, skipping start ")
