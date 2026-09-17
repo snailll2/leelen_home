@@ -43,7 +43,7 @@ class BaseLanProtocol:
 
     @staticmethod
     def get_aes_real_body(data: bytes) -> bytes:
-        decrypted = AesCoder.get_instance().decrypt("h9sv5JUzjeJKW81z", "9sng3f1cYsgQvEz5", data)
+        decrypted = AesCoder.decrypt_bytes(data, "h9sv5JUzjeJKW81z")
         buffer = memoryview(decrypted)
         length = ConvertUtils.to_unsigned_short(buffer[0:2])
         return bytes(buffer[2:2 + length])
@@ -175,10 +175,8 @@ class BaseLanProtocol:
                 buffer = bytearray()
                 buffer.extend(len_bytes)
                 buffer.extend(self.request_data_body)
-                self.request_data_body = AesCoder.get_instance().encrypt(
-                    "h9sv5JUzjeJKW81z",
-                    "9sng3f1cYsgQvEz5",
-                    bytes(buffer)
+                self.request_data_body = AesCoder.encrypt_bytes(
+                    bytes(buffer), "h9sv5JUzjeJKW81z"
                 )
         except Exception as e:
             LogUtils.e(self.TAG, f"Error encrypting body: {str(e)}")

@@ -3,7 +3,6 @@ import hashlib
 import json
 import random
 import string
-import threading
 import time
 import uuid
 from typing import Any
@@ -15,6 +14,7 @@ from aiohttp import ClientError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from ..common.SingletonMixin import SingletonMixin
 from ..entity.BaseParam import BaseParam, CodeLoginRequestParam, GetVerifyCodeRequestParam
 from ..entity.BaseRequest import BaseRequest
 # from ..process import get_secret
@@ -23,10 +23,7 @@ from ..utils.LogUtils import LogUtils
 from ..utils.RSAEncrypt import RSAEncrypt
 
 
-class HttpApi:
-    _instance = None
-    _lock = threading.Lock()
-
+class HttpApi(SingletonMixin):
     def __init__(self, hass: HomeAssistant):
         # pass
         self.BASE_URL = "https://iot.leelen.com"
@@ -43,15 +40,6 @@ class HttpApi:
     def get_secret(self, num: int) -> str:
         chars = string.ascii_letters + string.digits  # equivalent to "abcdef...6789"
         return ''.join(random.choice(chars) for _ in range(num))
-
-
-    @classmethod
-    def get_instance(cls, hass: HomeAssistant = None):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = HttpApi(hass)
-        return cls._instance
 
 
     def get_terminal_id(self):

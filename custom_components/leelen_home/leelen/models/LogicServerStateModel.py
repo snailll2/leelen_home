@@ -1,27 +1,17 @@
 from collections import defaultdict
-from threading import Lock
 
 from ..handler.DeviceStatusEvent import DeviceStatusEvent
 from ..handler import FlowRxBus
+from ..common.SingletonMixin import SingletonMixin
 from ..utils.LogUtils import LogUtils
 
 
-class LogicServerStateModel:
+class LogicServerStateModel(SingletonMixin):
     TAG = "🍋 LogicServerStateModel"
-    _instance = None
-    _lock = Lock()
 
     def __init__(self):
         self.state_array = defaultdict(dict)
         pass
-
-    @classmethod
-    def get_instance(cls):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = cls()
-        return cls._instance
 
     def add_or_update_state(self, logic_address: int, state_dict: dict[int, bytes]):
         LogUtils.i(self.TAG, f"添加或更新逻辑设备状态，address = {logic_address} {state_dict}")

@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 from ..common import LeelenConst
 from ..common.FrameIdSingleton import frame_id_counter
 from ..common.LeelenType import GatewayTable, TableOperateType
+from ..common.SingletonMixin import SingletonMixin
 from ..entity.GatewayInfo import GatewayInfo
 from ..entity.ConfigModifyInfo import ConfigModifyInfo
 from ..entity.Message import Message
@@ -22,9 +23,8 @@ from ..utils.LogUtils import LogUtils
 
 
 
-class LanDataResponseHandleModel:
+class LanDataResponseHandleModel(SingletonMixin):
     TAG = "LanDataResponseHandleModel"
-    _instance = None  # 用于实现单例
 
     def __init__(self):
         self.config_req_table_name_list = []
@@ -32,12 +32,6 @@ class LanDataResponseHandleModel:
         self.is_expired = False
         self._lock = threading.Lock()
         self.m_lan_data_request_model = LanDataRequestModel.get_instance()
-
-    @staticmethod
-    def get_instance():
-        if LanDataResponseHandleModel._instance is None:
-            LanDataResponseHandleModel._instance = LanDataResponseHandleModel()
-        return LanDataResponseHandleModel._instance
 
     def add_req_by_type(self, t1, t2, tbl, req_type, num):
         req = FetchConfigModReq()
@@ -55,7 +49,13 @@ class LanDataResponseHandleModel:
         data = json.loads(base_lan_protocol.request_data_body)
         random = data.get("random")  # 相当于 RandomAck.random
 
-        LogUtils.d(self.TAG, f"handle_random_key_response(): {random}")
+        # 网关拒绝时会返回 {"ack": 255}(无 random 字段)。把 ack 打出来,
+        # 便于在日志里区分「网关拒绝」与「正常返回 random」。
+        ack = data.get("ack")
+        if ack is not None and ack != 1:
+            LogUtils.w(self.TAG, f"gateway REJECTED random-key request, ack={ack} (body={data})")
+        else:
+            LogUtils.d(self.TAG, f"handle_random_key_response(): {random}")
 
         # 创建并发送消息
         msg = Message(what=1, obj=random)

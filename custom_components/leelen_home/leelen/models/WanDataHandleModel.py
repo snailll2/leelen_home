@@ -1,9 +1,9 @@
 import threading
-from typing import Optional
 
 from ..BaseConnect import LogonState
 from ..ConnectLan import ConnectLan
 from ..common import DeviceType
+from ..common.SingletonMixin import SingletonMixin
 from ..entity.GatewayInfo import GatewayInfo
 from ..entity.User import User
 from ..models.LanDataRequestModel import LanDataRequestModel
@@ -13,20 +13,12 @@ from ..utils.DataPkgUtils import DataPkgUtils
 from ..utils.LogUtils import LogUtils
 
 
-class WanDataHandleModel:
+class WanDataHandleModel(SingletonMixin):
     TAG = "WanDataHandleModel"
-    _instance: Optional['WanDataHandleModel'] = None
     _lock = threading.Lock()
 
     def __init__(self):
         pass
-
-    @classmethod
-    def get_instance(cls) -> 'WanDataHandleModel':
-        with cls._lock:
-            if not cls._instance:
-                cls._instance = WanDataHandleModel()
-            return cls._instance
 
     def request_wan_server_id(self):
         from .ConnectWan import ConnectWan

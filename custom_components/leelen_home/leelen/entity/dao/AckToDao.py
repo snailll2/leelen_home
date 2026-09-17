@@ -3,6 +3,7 @@ import threading
 
 from ...utils.LogUtils import LogUtils
 from ...common.LeelenType import GatewayTable
+from ...common.SingletonMixin import SingletonMixin
 from ..BaseDaoBean import BaseDaoBean
 from ...entity.GatewayInfo import GatewayInfo
 from ...entity.LogicServer import LogicServer
@@ -12,9 +13,7 @@ from ...models.LogicServerStateModel import LogicServerStateModel
 from ...utils.Base64Utils import Base64Utils
 
 
-class AckToDao:
-    _instance = None
-
+class AckToDao(SingletonMixin):
     COMMA_REX = ","
     LINE_REX = r"\n"
     TAG = "AckToDao"
@@ -25,12 +24,6 @@ class AckToDao:
         self.mAddDeviceAddressList: list[int] = []
         self._lock = threading.Lock()
         self.register_fetch_complete_event()
-
-    @classmethod
-    def get_instance(cls):
-        if cls._instance is None:
-            cls._instance = AckToDao()
-        return cls._instance
 
     def register_fetch_complete_event(self):
         # TODO: 这里你需要补充事件监听的实现逻辑

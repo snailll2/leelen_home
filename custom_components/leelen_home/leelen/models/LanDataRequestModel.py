@@ -4,6 +4,7 @@ from threading import Lock
 from ..HeartbeatService import HeartbeatService
 from ..common import DeviceType
 from ..common import LeelenConst
+from ..common.SingletonMixin import SingletonMixin
 from ..entity.GatewayInfo import GatewayInfo
 from ..entity.User import User
 from ..entity.req.ConfigLockReq import ConfigLockReq
@@ -19,9 +20,8 @@ from ..utils.EncodeUtil import EncodeUtil
 from ..utils.LogUtils import LogUtils
 
 
-class LanDataRequestModel:
+class LanDataRequestModel(SingletonMixin):
     TAG = "LanDataRequestModel"
-    _instance = None
     _lock = Lock()
 
     def __init__(self):
@@ -60,14 +60,6 @@ class LanDataRequestModel:
         fetch_req.T1 = 0
         fetch_req.T2 = ConvertUtils.to_long(LeelenConst.FF_BYTE)
         self.request_config_fetch(fetch_req)
-
-    @classmethod
-    def get_instance(cls):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = cls()
-        return cls._instance
 
     def get_state_data(self):
         gateway_desc = GatewayInfo.get_instance().gateway_desc_string

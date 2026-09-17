@@ -8,6 +8,7 @@ import uuid
 from typing import Optional, Callable, Dict
 
 from ..utils.LogUtils import LogUtils
+from .SingletonMixin import SingletonMixin
 
 
 class _ThreadPoolFuture:
@@ -149,10 +150,7 @@ class _WorkerThread(threading.Thread):
         return True
 
 
-class DefaultThreadPool:
-    _instance = None
-    _lock = threading.Lock()
-
+class DefaultThreadPool(SingletonMixin):
     BLOCKING_QUEUE_SIZE = 100
 
     def __init__(self):
@@ -195,25 +193,13 @@ class DefaultThreadPool:
         return f"task_{self._random_suffix}_{self._task_counter}"
 
     @classmethod
-    def get_instance(cls) -> 'DefaultThreadPool':
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        """重置单例实例，允许重新初始化线程池"""
-        with cls._lock:
-            if cls._instance is not None:
-                # 确保旧实例已关闭
-                try:
-                    cls._instance.shutdown_now()
-                except Exception:
-                    pass
-                cls._instance = None
-            LogUtils.i("ThreadPool instance reset")
+    def _on_reset(cls, instance) -> None:
+        """释放单例时确保旧实例已关闭,允许重新初始化线程池"""
+        try:
+            instance.shutdown_now()
+        except Exception:
+            pass
+        LogUtils.i("ThreadPool instance reset")
 
     def execute(self, task: Optional[Callable]) -> Optional[_ThreadPoolFuture]:
         """提交任务到线程池"""

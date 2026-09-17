@@ -1,7 +1,7 @@
-from typing import Optional
+from ..common.SingletonMixin import SingletonMixin
 
 
-class User:
+class User(SingletonMixin):
     """登录用户运行时状态 —— 纯数据持有,字段即状态,直接属性读写。
 
     遗留:Java getter/setter 包装(get_*/set_*)已清除,改为属性访问。
@@ -9,7 +9,6 @@ class User:
     """
 
     TAG = "User"
-    _instance: Optional['User'] = None
 
     def __init__(self):
         self.account_id = -1
@@ -20,12 +19,6 @@ class User:
         self.password = ""
         self.sound_type = ""
         self.username = ""
-
-    @classmethod
-    def get_instance(cls) -> 'User':
-        if not cls._instance:
-            cls._instance = User()
-        return cls._instance
 
     def is_project_account(self) -> bool:
         return self.username == "leelen"

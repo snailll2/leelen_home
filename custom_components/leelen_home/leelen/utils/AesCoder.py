@@ -1,37 +1,22 @@
 import base64
 import random
 import string
-import threading
 
 from Cryptodome.Cipher import AES
 from Cryptodome.Protocol.KDF import PBKDF2
 from Cryptodome.Util.Padding import pad, unpad
 
+from ..common.SingletonMixin import SingletonMixin
 from .LogUtils import LogUtils
 
 
-class AesCoder:
+class AesCoder(SingletonMixin):
     ALGORITHMTYPE = "AES"
     CIPHER_MODE = "AES/CBC/NoPadding"
     HEX = "0123456789ABCDEF"
     KEY = "<aes@leelen.com>"
     KEY_BYTES = KEY.encode('utf-8')
     TAG = "AesCoder"
-    _lock = threading.Lock()
-
-    _instance = None
-
-    @classmethod
-    def get_instance(cls) -> 'AesCoder':
-        with cls._lock:
-            if not cls._instance:
-                cls._instance = AesCoder()
-            return cls._instance
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(AesCoder, cls).__new__(cls)
-        return cls._instance
 
     @staticmethod
     def append_hex(string_buffer: str, byte: int) -> str:
@@ -98,6 +83,35 @@ class AesCoder:
     def get_raw_key(seed: bytes) -> bytes:
         # Note: This is a simplified version. Java's SHA1PRNG behavior is complex to replicate exactly
         return PBKDF2(seed, b'', dkLen=16)  # 16 bytes = 128 bits
+
+    @staticmethod
+    def encrypt_bytes(data: bytes, key: str) -> bytes:
+        """对 bytes 数据做 AES/ECB 加密(带 PKCS7 填充)。
+
+        供协议层加密 LAN 帧 body 使用。注意:key 只决定派生 raw key,
+        iv 参数在 play 端 ECAN 实现中未使用(与 Java 的 CBC 不同),这是
+        与原始 Python 移植版保持一致的最小修复。
+        """
+        if not data:
+            return b""
+        try:
+            raw_key = AesCoder.get_raw_key(key.encode('utf-8'))
+            return AesCoder._encrypt(raw_key, data)
+        except Exception as e:
+            LogUtils.d(f"{AesCoder.TAG} encrypt_bytes Exception: {str(e)}")
+            return b""
+
+    @staticmethod
+    def decrypt_bytes(data: bytes, key: str) -> bytes:
+        """对 bytes 数据做 AES/ECB 解密(带 PKCS7 去填充)。"""
+        if not data:
+            return b""
+        try:
+            raw_key = AesCoder.get_raw_key(key.encode('utf-8'))
+            return AesCoder._decrypt(raw_key, data)
+        except Exception as e:
+            LogUtils.d(f"{AesCoder.TAG} decrypt_bytes Exception: {str(e)}")
+            return b""
 
     @staticmethod
     def get_secret(length: int) -> str:

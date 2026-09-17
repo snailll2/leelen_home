@@ -3,6 +3,7 @@ from typing import Optional
 import logging
 
 from ..utils.LogUtils import LogUtils
+from .SingletonMixin import SingletonMixin
 from ..common import FunctionValue
 from ..models.DeviceStateModel import DeviceStateModel
 from ..states.LinBaseState import LinBaseState
@@ -14,18 +15,10 @@ from ..utils.ConvertUtils import ConvertUtils
 _LOGGER = logging.getLogger(__name__)
 
 
-class CommonModel:
-    _instance = None
-
+class CommonModel(SingletonMixin):
     def __init__(self):
         self._lock = Lock()
         # self.mDeviceModel =
-
-    @staticmethod
-    def get_instance():
-        if CommonModel._instance is None:
-            CommonModel._instance = CommonModel()
-        return CommonModel._instance
 
     def get_function_id_by_service_type(self, service_type: int, param2: int) -> int:
         result = 51201  # 默认返回值

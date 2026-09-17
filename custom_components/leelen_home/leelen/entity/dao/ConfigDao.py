@@ -1,24 +1,12 @@
-from threading import Lock
-
 from ..Config import Config
 from ..GatewayInfo import GatewayInfo
+from ...common.SingletonMixin import SingletonMixin
 from ...utils.LogUtils import LogUtils
 
 
-class ConfigDao:
-    _instance = None
-    _lock = Lock()
+class ConfigDao(SingletonMixin):
     config = Config()
     config.latest_time = 26800
-
-
-    @staticmethod
-    def get_instance():
-        if ConfigDao._instance is None:
-            with ConfigDao._lock:
-                if ConfigDao._instance is None:
-                    ConfigDao._instance = ConfigDao()
-        return ConfigDao._instance
 
     def delete_config_table(self):
         LogUtils.i("ConfigDao", "deleteConfigTable")

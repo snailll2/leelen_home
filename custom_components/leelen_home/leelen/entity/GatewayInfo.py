@@ -1,14 +1,14 @@
 import array
 import uuid
-from threading import Lock
 
 from ..common import DeviceType, ProtocolDefault
 from ..common import LeelenConst
+from ..common.SingletonMixin import SingletonMixin
 from ..utils.ConvertUtils import ConvertUtils
 from ..utils.LogUtils import LogUtils
 
 
-class GatewayInfo:
+class GatewayInfo(SingletonMixin):
     """网关运行时状态 —— 纯数据持有,字段即状态,直接属性读写。
 
     遗留:Java getter/setter 包装(get_*/set_*)已清除。
@@ -16,8 +16,6 @@ class GatewayInfo:
     """
 
     TAG = "GatewayInfo"
-    _instance = None
-    _lock = Lock()
 
     def __init__(self):
         self.aes_key = "9sng3f1cYsgQvEz5"
@@ -37,14 +35,6 @@ class GatewayInfo:
         self.temp_gateway_desc = self.default_desc
         self.uid = str(uuid.uuid4()).replace("-", "")
         self.wan_server_code = ProtocolDefault.DEFAULT_WAN_SERVER_ID
-
-    @classmethod
-    def get_instance(cls):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = cls()
-        return cls._instance
 
     def set_desc(self):
         pass

@@ -1,5 +1,6 @@
 import logging
 from ..common import DeviceType
+from ..common.SingletonMixin import SingletonMixin
 from ..entity.GatewayInfo import GatewayInfo
 from ..entity.User import User
 from ..protocols.DeviceControlLanProtocol import DeviceControlLanProtocol
@@ -10,17 +11,9 @@ from ..utils.LogUtils import LogUtils
 _LOGGER = logging.getLogger(__name__)
 
 
-class ControlModel:
-    _instance = None
-
+class ControlModel(SingletonMixin):
     def __init__(self):
         pass
-
-    @classmethod
-    def get_instance(cls) -> 'ControlModel':
-        if not cls._instance:
-            cls._instance = ControlModel()
-        return cls._instance
 
     def device_control(self, service_id: int, control_type: int, control_data: bytes) -> int:
         _LOGGER.info("!!! device_control called: addr=%s, func=%s, data=%s", service_id, control_type, control_data.hex())

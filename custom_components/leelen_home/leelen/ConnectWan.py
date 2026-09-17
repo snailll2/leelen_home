@@ -1,9 +1,9 @@
 import socket
-import threading
 
 from .BaseConnect import BaseConnect, LogonState
 from .ConnectLan import ConnectLan
 from .common import WanProtocolCmd, DeviceType, ProtocolDefault
+from .common.SingletonMixin import SingletonMixin
 from .entity.GatewayInfo import GatewayInfo
 from .entity.User import User
 from .models.WanDataHandleModel import WanDataHandleModel
@@ -16,11 +16,9 @@ from .utils.DataPkgUtils import DataPkgUtils
 from .utils.LogUtils import LogUtils
 
 
-class ConnectWan(BaseConnect):
+class ConnectWan(SingletonMixin, BaseConnect):
     MSG_TYPE_LOGON_TIMEOUT = 3
     SOURCE_DEST_LENGTH = 8
-    _instance = None
-    _lock = threading.Lock()
 
     def __init__(self, host: str):
         super().__init__(host, 17733, None, None)
@@ -29,24 +27,18 @@ class ConnectWan(BaseConnect):
         LogUtils.i("ConnectWan", "ConnectWan constructor")
 
     @classmethod
-    def get_instance(cls) -> 'ConnectWan':
-        with cls._lock:
-            if not cls._instance:
-                # TODO: Get actual server host
-                server_host = "rd.iot.leelen.com"
-                cls._instance = ConnectWan(server_host)
-            return cls._instance
+    def _create_instance(cls):
+        # TODO: Get actual server host
+        server_host = "rd.iot.leelen.com"
+        return cls(server_host)
 
     @classmethod
-    def reset_instance(cls) -> None:
-        """释放单例,供 HA 卸载/重载时清理,避免复用旧 socket/线程"""
-        with cls._lock:
-            if cls._instance is not None:
-                try:
-                    cls._instance.close()
-                except Exception as e:
-                    LogUtils.e(f"reset ConnectWan error: {e}")
-                cls._instance = None
+    def _on_reset(cls, instance):
+        """释放单例前关闭 socket/线程,避免复用旧连接"""
+        try:
+            instance.close()
+        except Exception as e:
+            LogUtils.e(f"reset ConnectWan error: {e}")
 
     def handle_protocol_data(self, protocol: BaseWanProtocol) -> None:
         LogUtils.i(self.tag, "handleProtocolData Wan")

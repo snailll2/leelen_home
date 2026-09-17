@@ -3,23 +3,16 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict
 
 from ..utils.ConvertUtils import ConvertUtils
+from ..common.SingletonMixin import SingletonMixin
 
 _LOGGER = logging.getLogger(__name__)
 
 OUT_LINE = "--"
 
 
-class DeviceStateModel:
-    _instance = None
-
+class DeviceStateModel(SingletonMixin):
     def __init__(self):
         self._state_map: Dict[int, int] = {}
-
-    @classmethod
-    def get_instance(cls):
-        if cls._instance is None:
-            cls._instance = DeviceStateModel()
-        return cls._instance
 
     def add_or_update_device_state(self, address: int, state: int):
         _LOGGER.info(f"添加或更新设备状态，address = {address}；state = {state}")

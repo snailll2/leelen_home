@@ -1,7 +1,8 @@
-import threading
+import time
 
 from .BaseConnect import ConnectState, LogonState, BaseConnect
 from .common import DeviceType
+from .common.SingletonMixin import SingletonMixin
 from .entity.GatewayInfo import GatewayInfo
 from .entity.Message import Message
 from .entity.User import User
@@ -46,6 +47,7 @@ class ConnectHandler:
             LogUtils.d(f"msg.what = logon_result, result={arg1}")
             self.remove_messages(3)
             if arg1 == 1:
+                self.connect_lan.logon_fail_count = 0  # 登录成功,清空失败计数
                 self.connect_lan.set_logon_state(LogonState.LOGGED_ON)
                 # result_event = LoginLanResultEvent(login_suc=True, code=0)
                 LogUtils.d("lan log on succeeded.")
@@ -69,18 +71,27 @@ class ConnectHandler:
         elif what == 4:  # logon_fail
             LogUtils.d("msg.what = logon_fail")
             self.connect_lan.set_logon_state(LogonState.NONE)
-            LogUtils.d(f"logonFailCount {self.connect_lan.logon_fail_count}")
+            # 修复:此前 logon_fail_count 从未累加,>=2 的封顶逻辑永远不触发,
+            # 网关持续拒绝(ack=255)时就在 get_randomkey/logon_fail 间无限空转(~1ms 一次)。
+            self.connect_lan.logon_fail_count += 1
+            LogUtils.w(f"logonFailCount {self.connect_lan.logon_fail_count}")
             if self.connect_lan.logon_fail_count >= 2:
                 self.connect_lan.logon_fail_count = 0
                 DataPkgUtils.clear_lan_data()
                 LogUtils.e("lan log on fail times exceed, close.")
                 if GatewayInfo.get_instance().gateway_desc == GatewayInfo.get_instance().default_desc:
                     GatewayInfo.get_instance().reset()
-                self.connect_lan.reset_lan()
+                if hasattr(self.connect_lan, "reset_lan"):
+                    self.connect_lan.reset_lan()
+                else:
+                    self.connect_lan.reset()
 
                 # result_event = LoginLanResultEvent(login_suc=False, code=1)
                 # RxBus.get_instance().post(result_event)
             else:
+                # 修复:首次失败后退避 1s 再重试,避免对网关做 1ms 级请求风暴
+                LogUtils.w("logon fail, backoff 1s before next random key request")
+                time.sleep(1)
                 self.connect_lan.send_logon_data()
 
     def send_empty_message(self, what):
@@ -95,7 +106,7 @@ class ConnectHandler:
         self.handle_message(msg)
 
 
-class ConnectLan(BaseConnect):
+class ConnectLan(SingletonMixin, BaseConnect):
     LOGON_FAIL_LIMIT = 2
     LOSS_HEARTBEAT_MAX_TIME = 3
     MSG_TYPE_GET_RANDOM_KEY = 1
@@ -105,8 +116,6 @@ class ConnectLan(BaseConnect):
     MSG_TYPE_UNICAST_RESULT = 0
     RECONNECT_MAX_TIME = 30
 
-    _instance = None
-    _lock = threading.Lock()
     mIsBindingGateway = False
 
     def __init__(self, server_host: str = None, server_port: int = 49153, username: str = None, password: str = None):
@@ -129,23 +138,12 @@ class ConnectLan(BaseConnect):
         self.mConnectHandler = ConnectHandler(self)
 
     @classmethod
-    def get_instance(cls):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = ConnectLan()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """释放单例,供 HA 卸载/重载时清理,避免复用旧 socket/线程"""
-        with cls._lock:
-            if cls._instance is not None:
-                try:
-                    cls._instance.close()
-                except Exception as e:
-                    LogUtils.e(f"reset ConnectLan error: {e}")
-                cls._instance = None
+    def _on_reset(cls, instance):
+        """释放单例前关闭 socket/线程,避免复用旧连接"""
+        try:
+            instance.close()
+        except Exception as e:
+            LogUtils.e(f"reset ConnectLan error: {e}")
 
     # @property
     def create_heartbeat_data(self):

@@ -1,11 +1,10 @@
-from threading import Lock
-
 from .BaseConnect import ConnectState
+from .common.SingletonMixin import SingletonMixin
 from .entity.User import User
 from .utils.LogUtils import LogUtils
 
 
-class HeartbeatService:
+class HeartbeatService(SingletonMixin):
     MSG_TYPE_KEEP_ALIVE = 1
     MSG_TYPE_HTTP_LOGON = 2
     MSG_TYPE_TCP_LAN_LOGON = 3
@@ -13,8 +12,6 @@ class HeartbeatService:
     MSG_TYPE_TASK_MOVE_TO_FRONT = 6
     MSG_TYPE_BIND_PROCESS = 7
 
-    _instance = None
-    _lock = Lock()
     TAG = "HeartbeatService"
 
     def __init__(self, hass=None):
@@ -26,21 +23,9 @@ class HeartbeatService:
         self.hass = hass
 
     @classmethod
-    def get_instance(cls) -> 'HeartbeatService':
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = HeartbeatService()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        """释放单例,供 HA 卸载/重载时清理,避免复用旧 hass/连接引用"""
-        with cls._lock:
-            if cls._instance is not None:
-                inst = cls._instance
-                cls._instance = None
-                inst._is_service_destroy = True
+    def _on_reset(cls, instance):
+        """释放单例时标记销毁,避免复用旧 hass/连接引用"""
+        instance._is_service_destroy = True
 
     def can_conn_lan(self):
         return True
