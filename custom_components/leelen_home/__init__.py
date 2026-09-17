@@ -12,6 +12,14 @@ from .service import LeelenService
 _LOGGER = logging.getLogger(__name__)
 
 
+async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """选项保存后自动重载集成:「保存即生效」(连接方式/网关IP/关联等变更无需手动 Reload)。
+
+    reload 会走 unload→setup 重建连接与实体,短暂断开重连(秒级)。
+    """
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     LogUtils.d(__name__, entry.data)
@@ -32,11 +40,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][CONF_GATEWAY_IP] = gateway_ip
 
 
-    service = LeelenService(hass, entry.data)
+    service = LeelenService(hass, entry)
 
     hass.data[DOMAIN][entry.entry_id] = {
         "service": service,
     }
+
+    # 选项保存即生效:任何 options 变更 → 自动 reload 集成(连接按新 options 重建)。
+    entry.async_on_unload(entry.add_update_listener(_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, SUPPORTED_PLATFORMS)
 

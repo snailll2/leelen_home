@@ -37,6 +37,7 @@
           "manage_links": "管理关联",
           "gateway_ip": "网关 IP",
           "sync_rooms": "同步房间",
+          "connect_mode": "连接方式",
           "cancel": "取消"
         }
       },
@@ -101,6 +102,10 @@
       "sync_rooms_error": {
         "title": "房间同步失败",
         "description": "同步过程中出现错误：\n{error}"
+      },
+      "connect_mode": {
+        "title": "连接方式",
+        "description": "选择设备控制走局域网(LAN)或互联网(WAN)。\n保存后立即生效。\n互联网模式不建立本地连接。"
       },
       "cancel": {
         "title": "已取消"

@@ -37,6 +37,7 @@
           "manage_links": "Manage Links",
           "gateway_ip": "Gateway IP",
           "sync_rooms": "Sync Rooms",
+          "connect_mode": "Connection Mode",
           "cancel": "Cancel"
         }
       },
@@ -100,6 +101,10 @@
       "sync_rooms_error": {
         "title": "Room Sync Failed",
         "description": "An error occurred during sync:\n{error}"
+      },
+      "connect_mode": {
+        "title": "Connection Mode",
+        "description": "Choose whether device control uses LAN (local network) or WAN (internet).\nTakes effect immediately on save.\nWAN mode does not establish a local connection."
       },
       "cancel": {
         "title": "Canceled"

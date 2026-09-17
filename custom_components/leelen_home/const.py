@@ -31,6 +31,11 @@ CONF_PASSWORD: Final = "password"
 CONF_DEVICE_ADDR: Final = "deviceAddr"
 CONF_ACCOUNT_ID: Final = "accountId"
 CONF_GATEWAY_IP: Final = "gateway_ip"
+CONF_CONNECT_MODE: Final = "connect_mode"
+
+CONNECT_MODE_LAN: Final = "lan"
+CONNECT_MODE_WAN: Final = "wan"
+DEFAULT_CONNECT_MODE: Final = CONNECT_MODE_LAN
 
 OPTIONS_CONFIG: Final = "config"
 OPTIONS_SELECT: Final = "select"

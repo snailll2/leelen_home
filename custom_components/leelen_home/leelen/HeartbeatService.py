@@ -2,6 +2,7 @@ from .BaseConnect import ConnectState
 from .common.SingletonMixin import SingletonMixin
 from .entity.User import User
 from .utils.LogUtils import LogUtils
+from ..const import CONNECT_MODE_WAN, DEFAULT_CONNECT_MODE
 
 class HeartbeatService(SingletonMixin):
     MSG_TYPE_KEEP_ALIVE = 1
@@ -20,6 +21,8 @@ class HeartbeatService(SingletonMixin):
         self.connect_wan = None
         self.no_intent = False
         self.hass = hass
+        # 请求路由模式:lan(local)/wan(internet),由 service.async_start 按 options 设置。
+        self.request_mode = DEFAULT_CONNECT_MODE
 
     @classmethod
     def _on_reset(cls, instance):
@@ -91,13 +94,19 @@ class HeartbeatService(SingletonMixin):
         # 2. 重置状态
         self._is_service_destroy = False
 
-        # 3. 重新启动LAN连接
+        # 3. 按当前模式重新启动对应连接:
+        #    - WAN 模式只起 WAN,绝不起 LAN —— WAN 回包仅在 ConnectLan.is_logged_on()==False
+        #      时被处理(ConnectWan.handle_protocol_data),LAN 登录成功会吞掉 WAN 回程。
+        #    - LAN 模式保持原逻辑(建 LAN + 心跳)。
         try:
-            self.lan_conn_create()
-            # 4. 确保心跳服务启动
-            if self.connect_lan:
-                LogUtils.i("Starting heartbeat service")
-                self.connect_lan.start_heartbeat()
+            if self.request_mode == CONNECT_MODE_WAN:
+                self.wan_conn_open()
+            else:
+                self.lan_conn_create()
+                # 4. 确保心跳服务启动
+                if self.connect_lan:
+                    LogUtils.i("Starting heartbeat service")
+                    self.connect_lan.start_heartbeat()
             LogUtils.i("Reset and restart completed")
         except Exception as e:
             LogUtils.e(f"Error during reset and restart: {e}")
@@ -117,7 +126,17 @@ class HeartbeatService(SingletonMixin):
 
     def request(self, data):
         try:
-            self.connect_lan.add_request(data)
+            # 全组件唯一出口:实体控制 + LanDataRequestModel 查询都汇入这里。
+            # WAN 模式走 connect_wan(同一 LAN 帧包 PassThroughWanProtocol 上行),
+            # 否则走 connect_lan。两个 add_request 收相同的帧字节,无需改协议。
+            if self.request_mode == CONNECT_MODE_WAN and self.connect_wan:
+                self.connect_wan.add_request(data)
+                return
+            if self.connect_lan:
+                self.connect_lan.add_request(data)
+                return
+            # 两路都不可用时打 WARN,不要静默丢帧,便于排查命令丢失
+            LogUtils.w("request: no active connection, frame dropped")
         except Exception as e:
             # 发送失败要可见,便于排查命令丢失
             LogUtils.w(f"request send failed: {e}")

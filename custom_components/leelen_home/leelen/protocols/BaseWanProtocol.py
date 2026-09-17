@@ -126,10 +126,13 @@ class BaseWanProtocol:
                 buffer.extend(LeelenConst.WAN_SYNC_HEADER)
                 buffer.extend(self.protocol_ver)
                 buffer.extend(self.cmd)
-                buffer.extend(ConvertUtils.to_bytes(self.get_session_id()))
+                # session_id / length 必须固定 4 字节小端:ConvertUtils.to_bytes()
+                # 对 short 区间值只编 2 字节,会把整个 head 压缩到 29B,服务器按
+                # 33B 头解析时 action/length 全体错位(实测在线零回包)。
+                buffer.extend((self.get_session_id() & 0xFFFFFFFF).to_bytes(4, "little"))
                 buffer.append(self.action_type)
                 buffer.append(self.encrypted)
-                buffer.extend(ConvertUtils.to_bytes(self.length))
+                buffer.extend((self.length & 0xFFFFFFFF).to_bytes(4, "little"))
                 buffer.extend(self.source)
                 buffer.extend(self.dest)
 

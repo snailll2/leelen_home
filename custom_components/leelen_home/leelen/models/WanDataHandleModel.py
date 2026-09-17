@@ -21,7 +21,7 @@ class WanDataHandleModel(SingletonMixin):
         pass
 
     def request_wan_server_id(self):
-        from .ConnectWan import ConnectWan
+        from ..ConnectWan import ConnectWan
 
         LogUtils.d(self.TAG, "request_wan_server_id()")
         protocol = GetServerCodeWanProtocol()
@@ -30,7 +30,7 @@ class WanDataHandleModel(SingletonMixin):
         ConnectWan.get_instance().send_data(protocol.get_request_data(source, dest))
 
     def response_login_other_place(self):
-        from .ConnectWan import ConnectWan
+        from ..ConnectWan import ConnectWan
 
         LogUtils.d(self.TAG, "response_login_other_place() post login other place event")
         User.get_instance().reset()
@@ -64,5 +64,5 @@ class WanDataHandleModel(SingletonMixin):
             request_model.get_state_data()
             request_model.request_config_query()
 
-        from .ConnectWan import ConnectWan
+        from ..ConnectWan import ConnectWan
         ConnectWan.get_instance().set_get_request_server_id()

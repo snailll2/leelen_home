@@ -38,6 +38,12 @@ class PassThroughWanProtocol(BaseWanProtocol):
         buffer.extend(seq)
         buffer.extend(data)
 
+        # Java 原版 ByteBuffer.allocate(data_len + 28) 会将剩余字节补 0,
+        # 再对完整 total_len 计算 CRC。Python bytearray() 只 append 了实际
+        # 字段(共 data_len+26),直接按 total_len 遍历会越界 (IndexError)。
+        # 补齐到 total_len 再算,与 Java 完全一致。
+        if len(buffer) < total_len:
+            buffer.extend(b'\x00' * (total_len - len(buffer)))
         crc = CRC8Utils.calc_shift_val(buffer, total_len)
 
         result = bytearray()
@@ -115,8 +121,8 @@ class PassThroughWanProtocol(BaseWanProtocol):
             buffer.extend(self.cmd)
             buffer.extend(wan_server_code)
             buffer.extend(struct.pack('<H', BaseWanProtocol.get_seq()))
-            buffer.extend(self.action_type)
-            buffer.extend(self.encrypted)
+            buffer.append(self.action_type)
+            buffer.append(self.encrypted)
             buffer.extend(struct.pack('<I', self.length))
             buffer.extend(self.source)
             buffer.extend(self.dest)
@@ -125,7 +131,11 @@ class PassThroughWanProtocol(BaseWanProtocol):
             return True
 
     def get_request_data(self) -> bytes:
-        return self.get_request_data(self.source, self.dest)
+        # Java 原版:无参 getRequestData() 是重载,委托给基类的
+        # getRequestData(source, dest)。Python 无重载,self.get_request_data(...)
+        # 会无限自调用(递归到自身)→ TypeError,控制帧永远发不出去。
+        # 必须显式调基类方法。
+        return BaseWanProtocol.get_request_data(self, self.source, self.dest)
 
     def handle_pass_through_callback(self, data: bytes) -> None:
         if not data:
@@ -165,7 +175,10 @@ class PassThroughWanProtocol(BaseWanProtocol):
                 LogUtils.d(self.TAG, "handlePassThroughCallback() pass through data to lan")
                 if src == GatewayInfo.get_instance().gateway_desc:
                     lan_data = self.build_lan_data(pass_data, src, dest, seq)
-                    ConnectLan.get_instance().handle_pass_through_data(lan_data)
+                    # Java 原版调 ConnectLan.handlePassThroughData → pushLan/pullLan →
+                    # handleProtocolData。Python 同义方法是 handle_recv_data(同样的
+                    # push_lan → pull_lan → handle_protocol_data),handle_pass_through_data 不存在。
+                    ConnectLan.get_instance().handle_recv_data(lan_data)
 
         except Exception as e:
             LogUtils.e(self.TAG, f"Error handling callback: {str(e)}")

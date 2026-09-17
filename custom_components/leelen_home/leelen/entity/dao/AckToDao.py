@@ -1,60 +1,44 @@
+"""网关增量配置 ack 的内容解析与状态事件派发。
+
+原 Java 端口里这是「表数据落 Android 数据库」的 DAO 层;P1/P4 清理后
+数据库逻辑已全部移除,真正存活的只有一条链路:
+
+    transform_data() ← 每个 config fetch ack(LanDataResponseHandleModel)
+      └ transform_by_table() 按表名分发
+          └ trans_logic_server_state_data():解析 logic_server_state CSV,
+            按去重规则发 DeviceStatusEvent → FlowRxBus(HA dispatcher 适配层)
+            → 实体 update_state
+
+其余表(device/device_state/logic_server/floor/scene...)的增量在此集成中
+无消费者,已在 P1 时连同存储逻辑一并裁掉。
+"""
 import base64
 import threading
 
 from ...utils.LogUtils import LogUtils
 from ...common.LeelenType import GatewayTable
 from ...common.SingletonMixin import SingletonMixin
-from ..BaseDaoBean import BaseDaoBean
-from ...entity.GatewayInfo import GatewayInfo
-from ...entity.LogicServer import LogicServer
 from ...handler.DeviceStatusEvent import DeviceStatusEvent
 from ...handler import FlowRxBus
 from ...models.LogicServerStateModel import LogicServerStateModel
-from ...utils.Base64Utils import Base64Utils
 
 
 class AckToDao(SingletonMixin):
-    COMMA_REX = ","
-    LINE_REX = r"\n"
     TAG = "AckToDao"
 
     def __init__(self):
         self.m_value_list: list[str] = []
         self.m_field_list: list[str] = []
-        self.mAddDeviceAddressList: list[int] = []
+        # 同一 ack 内的串行解析;网关多包 ack 由 LAN 收包线程顺序投递,锁是防御性互斥
         self._lock = threading.Lock()
-        self.register_fetch_complete_event()
-
-    def register_fetch_complete_event(self):
-        # TODO: 这里你需要补充事件监听的实现逻辑
-        pass
-
-    def get_operate_type(self, op_type: str) -> int:
-        if op_type.lower() == "insert":
-            return 1
-        elif op_type.lower() == "update":
-            return 2
-        else:
-            return 3
-
-    def trans_device_state_data(self, keys, data_list):
-        """
-        keys: List[str] - 类似 ["dev_addr", "state", ...]
-        data_list: List[str] - 每个元素是类似 "1,2,3" 的字符串
-        """
-        for item in data_list:
-            split = item.split(',')
-            if len(split) == len(keys):
-                index_of_addr = keys.index("dev_addr") if "dev_addr" in keys else -1
-                index_of_state = keys.index("state") if "state" in keys else -1
-
-                address = int(split[index_of_addr]) if index_of_addr != -1 else 0
-                state = int(split[index_of_state]) if index_of_state != -1 else 0
-
-                # print(f"增加设备状态信息：address = {address}; state = {state}")
-                # DeviceStateModel.get_instance().add_or_update_device_state(address, state)
 
     def trans_logic_server_state_data(self, field_list, row_list):
+        """解析 logic_server_state 表增量,按去重规则派发状态事件。
+
+        行内字段:logic_addr, func_id, state(base64 编码的设备状态字节)。
+        去重:func_id 在 {55318, 53268, 43029} 时,前后两次状态首字节都是 0
+        视为「重复上报」不再重复发事件(这些功能位持续 0 时风暴抑制)。
+        """
         model = LogicServerStateModel.get_instance()
 
         for row in row_list:
@@ -80,7 +64,7 @@ class AckToDao(SingletonMixin):
                 try:
                     state_bytes = base64.b64decode(fields[state_index])
                 except Exception as e:
-                    LogUtils.e("LogicServerStateModel", f"base64 stateIndex exception : {e}")
+                    LogUtils.e(self.TAG, f"base64 state decode exception : {e}")
                     continue
 
             if state_bytes is None:
@@ -100,11 +84,6 @@ class AckToDao(SingletonMixin):
                     else:
                         should_post_event = False
 
-                # if previous_state is not None:
-                #     if np.array_equal(np.frombuffer(previous_state, dtype=np.uint8),
-                #                       np.frombuffer(state_bytes, dtype=np.uint8)):
-                #         should_post_event = False
-
             if should_post_event:
                 device_event = DeviceStatusEvent()
                 device_event.logic_address = logic_addr
@@ -112,194 +91,22 @@ class AckToDao(SingletonMixin):
                 device_event.state = state_bytes
                 FlowRxBus.post(device_event)
 
-                # if func_id in [18442, 22529, 16395, 18455]:
-                #     env_event = EnvironmentStatusEvent()
-                #     env_event.logic_address = logic_addr
-                #     env_event.function_id = func_id
-                #     FlowRxBus.get_instance().post(env_event)
-
             device_state[func_id] = state_bytes
             model.add_or_update_state(logic_addr, device_state)
 
-    def trans_device_data(self, operate_type: str, keys: list[str], rows: list[str]):
-        print("转换设备")
-        device_list = []
-        gateway_desc = GatewayInfo.get_instance().gateway_desc_string
-
-        for row in rows:
-            split = row.split(',')
-            if len(split) == len(keys):
-                device = Device()
-                device.gateway_address = gateway_desc
-
-                index_map = {key: keys.index(key) for key in keys}
-
-                # def safe_get(key, default=0, decode=False, long_val=False):
-                #     idx = index_map.get(key, -1)
-                #     if idx == -1: return None
-                #     try:
-                #         val = split[idx]
-                #         if decode:
-                #             return Base64Utils.decode(val)
-                #         return int(val) if not long_val else int(val)
-                #     except Exception as e:
-                #         print(f"字段 {key} 处理异常: {e}")
-                #         return default
-
-                # device.dev_addr = safe_get(Device.DEV_ADDR, 0)
-                # device.dev_type = safe_get(Device.DEV_TYPE, 0)
-                # device.soft_version = safe_get(Device.SOFT_VERSION, "", decode=True)
-                # device.dev_name = split[index_map.get(Device.DEV_NAME, -1)] if Device.DEV_NAME in keys else ""
-                # device.dip = split[index_map.get(Device.DIP, -1)] if Device.DIP in keys else ""
-                # device.sn = safe_get(Device.SN, "", decode=True)
-                # device.srv_num = safe_get(Device.SRV_NUM, 0)
-                # device.room_id = safe_get(Device.ROOM_ID, 0)
-                # device.create_time = safe_get(BaseDaoBean.CREATE_TIME, 0, long_val=True)
-                # device.update_time = safe_get(BaseDaoBean.UPDATE_TIME, 0, long_val=True)
-                #
-                # device_list.append(device)
-
-        # if operate_type.lower() not in [LeelenType.TableOperateType.TYPE_INSERT,
-        #                                 LeelenType.TableOperateType.TYPE_UPDATE]:
-        #     DeviceDao.get_instance().delete_device_list(device_list)
-        #     return
-        #
-        # print("设备添加1")
-        # DeviceDao.get_instance().add_or_update_device_list(device_list)
-        #
-        # if operate_type.lower() == LeelenType.TableOperateType.TYPE_INSERT:
-        #     print("设备添加2")
-        #     for dev in device_list:
-        #         self.m_add_device_address_list.append(dev.dev_addr)
-        #         print("设备添加3")
-        #         FlowRxBus.get_instance().post(dev)
-
-    def trans_logic_server_data(self, op_type: str, keys: list[str], rows: list[str]):
-        logic_server_list = []
-        update_bean_list = []
-        gateway_address = GatewayInfo.get_instance().gateway_desc_string
-        key_index = {k: i for i, k in enumerate(keys)}
-
-        for row in rows:
-            split = row.split(',')
-            if len(split) != len(keys):
-                continue
-
-            def get_int(key: str, default=0):
-                try:
-                    return int(split[key_index[key]]) if key in key_index else default
-                except:
-                    return default
-
-            def get_str(key: str, default=""):
-                return split[key_index[key]] if key in key_index else default
-
-            def get_base64(key: str, default=""):
-                try:
-                    return Base64Utils.decode(split[key_index[key]]) if key in key_index else default
-                except Exception as e:
-                    LogUtils.e("LogicServerProcessor", f"Base64 decode failed for {key}: {e}")
-                    return default
-
-            logic = LogicServer()
-            logic.gateway_address = gateway_address
-            logic.logic_addr = get_int(LogicServer.LOGIC_ADDR)
-            logic.dev_addr = get_int(LogicServer.DEV_ADDR)
-            logic.srv_id = get_int(LogicServer.SRV_ID)
-            logic.srv_type = get_int(LogicServer.SRV_TYPE)
-            logic.storage_type = get_int(LogicServer.STORAGE_TYPE)
-            logic.logic_type = get_int(LogicServer.LOGIC_TYPE)
-            logic.func_grp_num = get_int(LogicServer.FUNC_GRP_NUM)
-            logic.func_grp_id = get_base64(LogicServer.FUNC_GRP_ID)
-            logic.display = get_int(LogicServer.DISPLAY)
-            logic.icon_id = get_int(LogicServer.ICON_ID)
-            logic.logic_name = get_str(LogicServer.LOGIC_NAME)
-            logic.room_id = get_int(LogicServer.ROOM_ID)
-            logic.create_time = get_int(BaseDaoBean.CREATE_TIME, 0)
-            logic.update_time = get_int(BaseDaoBean.UPDATE_TIME, 0)
-
-            logic_server_list.append(logic)
-
-            # bean = LogicServerUpdateBean()
-            # bean.set_logic_address(logic.logic_addr)
-            # bean.set_icon_id(logic.icon_id)
-            # bean.set_logic_type(logic.logic_type)
-            # bean.set_display(logic.display)
-            # bean.set_logic_name(logic.logic_name)
-            # bean.set_room_id(logic.room_id)
-            # bean.set_operate_type(op_type.strip().lower())
-            # update_bean_list.append(bean)
-
-        # dao = LogicServerDao.get_instance()
-        # if op_type.lower() in ["insert", "update"]:
-        #     dao.add_or_update_logic_server_list(logic_server_list)
-        # else:
-        #     dao.delete_logic_server_list(logic_server_list)
-        #
-        # event = LogicServerUpdateEvent()
-        # event.list = update_bean_list
-        # RxBus.get_instance().post(event)
-
     def transform_by_table(self, fetch_config_mod_ack, field_list: list[str], value_list: list[str]):
+        """按表名分发到解析函数。无消费者的表直接跳过(增量无副作用)。"""
         tbl = fetch_config_mod_ack.tbl.lower()
         op_type = fetch_config_mod_ack.type
 
-        LogUtils.i(f"获取table {tbl}数据 {op_type} : {fetch_config_mod_ack} {field_list} {value_list}")
+        LogUtils.i(f"获取table {tbl}数据 {op_type}")
 
-        if tbl == GatewayTable.FLOOR_TABLE_NAME.lower():
-            pass
-            # self.trans_floor_data(op_type, field_list, value_list)
-        elif tbl == GatewayTable.DEVICE_STATE_TABLE_NAME.lower():
-            self.trans_device_state_data(field_list, value_list)
-        elif tbl == GatewayTable.DEVICE_TABLE_NAME.lower():
-            self.trans_device_data(op_type, field_list, value_list)
-        elif tbl == GatewayTable.LOGIC_SERVER_STATE_TABLE_NAME.lower():
+        if tbl == GatewayTable.LOGIC_SERVER_STATE_TABLE_NAME.lower():
             self.trans_logic_server_state_data(field_list, value_list)
-        # elif tbl == GatewayTable.ROOM_TABLE_NAME.lower():
-        #     self.trans_room_data(op_type, field_list, value_list)
-        elif tbl == GatewayTable.LOGIC_SERVER_TABLE_NAME.lower():
-            self.trans_logic_server_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.SCENE_TABLE_NAME.lower():
-        #     self.trans_scene_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.SCENE_CTRL_TABLE_NAME.lower():
-        #     self.trans_scene_ctrl_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.PROPERTY_TABLE_NAME.lower():
-        #     self.trans_property_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.LINKAGE_TABLE_NAME.lower():
-        #     self.trans_linkage_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.LINKAGE_CTRL_TABLE_NAME.lower():
-        #     self.trans_linkage_ctrl_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.LINKAGE_COND_TABLE_NAME.lower():
-        #     self.trans_linkage_cond_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.TIMER_TABLE_NAME.lower():
-        #     self.trans_timer_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.TIMER_CONTROL_TABLE_NAME.lower():
-        #     self.trans_timer_control_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.IR_KEY_TABLE_NAME.lower():
-        #     self.trans_ir_key_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.SERIAL_PORT_TABLE_NAME.lower():
-        #     self.trans_ir_port_key_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.ACCOUNT_TABLE_NAME.lower():
-        #     self.trans_account_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.MSG_STORAGE_LOCK_TABLE_NAME.lower():
-        #     self.trans_lock_msg_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.APP_STORAGE_TABLE_NAME.lower():
-        #     self.trans_app_storage_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.MSG_STORAGE_COMMON_TABLE_NAME.lower():
-        #     self.trans_common_msg_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.TEMPORARY_USER_TABLE_NAME.lower():
-        #     self.trans_temporary_user_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.SCHEDULE_STORAGE_TABLE_NAME.lower():
-        #     self.trans_schedule_storage_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.ARM_TABLE_NAME.lower():
-        #     self.trans_arm_data(op_type, field_list, value_list)
-        # elif tbl == GatewayTable.SENSOR_STATE_TABLE_NAME.lower():
-        #     self.trans_sensor_state_data(field_list, value_list)
 
     def transform_data(self, fetch_config_mod_ack):
-
+        """网关配置 ack 的统一入口:首行为字段名,其余为 CSV 数据行。"""
         LogUtils.i(f"transform_data 数据 {fetch_config_mod_ack} ")
-
 
         with self._lock:  # 单例对象上的真实互斥,替代每次新建的假锁
             content = fetch_config_mod_ack.cont

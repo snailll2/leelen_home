@@ -13,7 +13,9 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from . import room_sync
-from .const import DOMAIN, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES, CONF_GATEWAY_IP
+from .const import (DOMAIN, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES,
+                    CONF_GATEWAY_IP, CONF_CONNECT_MODE, CONNECT_MODE_LAN, CONNECT_MODE_WAN,
+                    DEFAULT_CONNECT_MODE)
 from .leelen.api.HttpApi import HttpApi
 from .platform_helper import SIGNAL_DEVICE_REFRESH
 from .leelen.utils.LogUtils import LogUtils
@@ -121,7 +123,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """初始选项菜单，提供刷新按钮"""
         return self.async_show_menu(
             step_id="init",
-            menu_options=["refresh", "link", "manage_links", "gateway_ip", "sync_rooms"],
+            menu_options=["refresh", "link", "manage_links", "gateway_ip", "sync_rooms", "connect_mode"],
         )
 
     async def async_step_gateway_ip(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -144,6 +146,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             }),
             description_placeholders={"auto_ip": auto or "未知"},
             errors={} if current else None,
+        )
+
+    async def async_step_connect_mode(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """连接方式:局域网(LAN)或互联网(WAN)。保存即生效(自动重载)。
+
+        两种连接收的是同一个 LAN 帧,只是走的 socket 不同(LAN 直连网关 /
+        WAN 过云端 PassThrough)。切换后由 update_listener 触发重载,连接自动重建。
+        """
+        current = self._config.get(CONF_CONNECT_MODE, DEFAULT_CONNECT_MODE)
+        if user_input is not None:
+            self._config[CONF_CONNECT_MODE] = user_input[CONF_CONNECT_MODE]
+            return self.async_create_entry(title="", data={OPTIONS_CONFIG: self._config})
+
+        return self.async_show_form(
+            step_id="connect_mode",
+            data_schema=vol.Schema({
+                vol.Required(CONF_CONNECT_MODE, default=current): vol.In({
+                    CONNECT_MODE_LAN: "局域网 (LAN)  — 设备在同一网段时最快",
+                    CONNECT_MODE_WAN: "互联网 (WAN)  — 跨网段/异地也可用",
+                }),
+            }),
         )
 
     async def async_step_refresh(self, user_input: dict[str, Any] | None = None) -> FlowResult:
