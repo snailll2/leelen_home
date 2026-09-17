@@ -3,6 +3,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from . import room_sync
 from .const import DOMAIN, SUPPORTED_PLATFORMS, CONF_PHONE, OPTIONS_CONFIG, CONF_DEVICE_ADDR, CONF_GATEWAY_IP
 from .leelen.api.HttpApi import HttpApi
 from .leelen.utils.LogUtils import LogUtils
@@ -43,6 +44,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, SUPPORTED_PLATFORMS)
+
+    # 后台自动同步房间→区域。此处设备注册表条目已由平台实体注册完成,
+    # 用 entry 绑定的后台任务避免阻塞 setup(异常已收敛进 SyncStats.note)。
+    entry.async_create_background_task(
+        hass, room_sync.run_background_sync(hass, entry), name="leelen_home_room_sync"
+    )
 
     await service.async_start(
         entry.options[OPTIONS_CONFIG] if OPTIONS_CONFIG in entry.options else {}

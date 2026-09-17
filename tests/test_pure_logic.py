@@ -16,6 +16,7 @@ sys.path.insert(0, "/config/custom_components")
 from leelen_home.leelen.utils.ConvertUtils import ConvertUtils
 from leelen_home.leelen.utils.TlvUtils import TlvUtils, TlvInfo
 from leelen_home.leelen.utils.AesCoder import AesCoder
+from leelen_home.room_sync import compute_device_room_map
 
 
 class TestConvertUtils(unittest.TestCase):
@@ -97,6 +98,67 @@ class TestTlvUtils(unittest.TestCase):
                 self.assertEqual(a.type, b.type)
                 self.assertEqual(a.len, b.len)
                 self.assertEqual(a.value, b.value)
+
+
+class TestRoomSync(unittest.TestCase):
+    """room→area 同步的纯映射逻辑(compute_device_room_map)。
+
+    需与 query_devices 产出的 device dict 结构兼容:
+    {"dev_addr": int, "logic_srv": [{"room_id": int}, ...]}
+    """
+
+    @staticmethod
+    def _dev(addr, rooms):
+        """构造一个设备 dict;rooms 为各 logic 通道的 room_id 列表。"""
+        return {
+            "dev_addr": addr,
+            "dev_name": f"dev{addr}",
+            "logic_srv": [{"dev_addr": addr, "room_id": r} for r in rooms],
+        }
+
+    def test_empty_device_list(self):
+        self.assertEqual(compute_device_room_map([]), {})
+
+    def test_all_room_zero_maps_to_living_room(self):
+        # room_id 0 就是「客厅」,与其他房间同等对待,不再跳过
+        dev = {"dev_addr": 112, "logic_srv": [{"room_id": 0}, {"room_id": None}, {}]}
+        self.assertEqual(compute_device_room_map([dev]), {112: 0})
+
+    def test_nonzero_room_beats_default_zero(self):
+        # 有刻意配置的非 0 房间时,默认值 0(客厅)不参与多数票
+        self.assertEqual(compute_device_room_map([self._dev(224, [3, 0, 0])]), {224: 3})
+
+    def test_single_room_maps(self):
+        self.assertEqual(compute_device_room_map([self._dev(224, [3, 3, 0])]), {224: 3})
+
+    def test_majority_wins_same_device(self):
+        self.assertEqual(compute_device_room_map([self._dev(224, [3, 3, 5, 0])]), {224: 3})
+
+    def test_tie_breaks_to_lower_room(self):
+        self.assertEqual(compute_device_room_map([self._dev(224, [3, 5, 3, 5, 4])]), {224: 3})
+
+    def test_string_room_id_coerced(self):
+        self.assertEqual(compute_device_room_map([self._dev(224, ["3", "5", "3"])]), {224: 3})
+
+    def test_multiple_devices_isolated(self):
+        devices = [
+            self._dev(224, [3, 3]),
+            self._dev(144, [5, 0]),
+            self._dev(16, [1]),
+            self._dev(32, [0, 0]),  # 全 0 → 客厅(room 0)
+        ]
+        self.assertEqual(compute_device_room_map(devices), {224: 3, 144: 5, 16: 1, 32: 0})
+
+    def test_string_numeric_dev_addr_coerced(self):
+        dev = {"dev_addr": "224", "logic_srv": [{"room_id": 3}]}
+        self.assertEqual(compute_device_room_map([dev]), {224: 3})
+
+    def test_device_without_logic_srv(self):
+        self.assertEqual(compute_device_room_map([{"dev_addr": 1}]), {})
+
+    def test_zero_dev_addr_skipped(self):
+        dev = {"dev_addr": 0, "logic_srv": [{"room_id": 3}]}
+        self.assertEqual(compute_device_room_map([dev]), {})
 
 
 class TestAesCoder(unittest.TestCase):

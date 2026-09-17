@@ -12,6 +12,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
+from . import room_sync
 from .const import DOMAIN, OPTIONS_SELECT, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES, CONF_GATEWAY_IP
 from .leelen.api.HttpApi import HttpApi
 from .leelen.utils.LogUtils import LogUtils
@@ -113,12 +114,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self._config_entry = config_entry
         self._config = dict(config_entry.options.get(OPTIONS_CONFIG, config_entry.data.get(OPTIONS_CONFIG, {})))
         self._refresh_stats: dict[str, str] = {}
+        self._sync_rooms_stats: dict[str, str] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """初始选项菜单，提供刷新按钮"""
         return self.async_show_menu(
             step_id="init",
-            menu_options=["refresh", "link", "manage_links", "gateway_ip"],
+            menu_options=["refresh", "link", "manage_links", "gateway_ip", "sync_rooms"],
         )
 
     async def async_step_gateway_ip(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -165,15 +167,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # 获取当前设备ID集合（确保都是字符串类型）
             current_device_ids = {str(device.get("dev_addr")) for device in all_devices}
 
-            # 获取当前配置项已有的设备ID（通过检查实体的config_entry_id）
-            entity_registry = er.async_get(self.hass)
-            existing_device_ids = set()
-            for entry in entity_registry.entities.values():
-                if entry.config_entry_id == self._entry_id and entry.unique_id:
-                    # 从 unique_id 提取设备ID: leelen_logic_addr_{logic_addr}
-                    parts = entry.unique_id.split("_")
-                    if len(parts) >= 2 and parts[0] == "leelen":
-                        existing_device_ids.add(entry.unique_id)
+            # 通过设备注册表拿「已注册在新的配置项下」的 dev_addr 集合,
+            # 再和当前 DB 设备去比,才能算出真正的新增设备数。
+            # (旧实现拿实体 unique_id(leelen_logic_addr_x) 与 dev_addr 比较,
+            # 两者永不相交 → 「新增」恒等于总数,统计失真。)
+            device_registry = dr.async_get(self.hass)
+            existing_device_ids = {
+                str(identifier[1])
+                for dev in list(device_registry.devices.values())
+                if self._entry_id in getattr(dev, "config_entries", set())
+                for identifier in dev.identifiers
+                if identifier[0] == "LEELEN_HOME"
+            }
 
             # 清理已删除的设备（只清理当前配置项的）
             device_registry = dr.async_get(self.hass)
@@ -191,6 +196,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         break
 
             # 删除无用实体（只删除当前配置项的）
+            entity_registry = er.async_get(self.hass)
             removed_entities = 0
             for entry in list(entity_registry.entities.values()):
                 if entry.config_entry_id != self._entry_id:
@@ -232,6 +238,43 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="refresh_result",
             data_schema=vol.Schema({}),
             description_placeholders=self._refresh_stats,
+        )
+
+    async def async_step_sync_rooms(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """手动同步房间:重下配置并把设备分配到 HA 区域(只填空,不覆盖已有区域)。"""
+        if user_input is not None:
+            return await self.async_step_sync_rooms_result()
+
+        stats = await room_sync.sync_rooms_to_areas(
+            self.hass, self._config_entry, re_download=True
+        )
+        if stats.note:
+            self._sync_rooms_stats = {"error": stats.note}
+            return await self.async_step_sync_rooms_error()
+
+        self._sync_rooms_stats = room_sync.stats_to_placeholders(stats)
+        return await self.async_step_sync_rooms_result()
+
+    async def async_step_sync_rooms_result(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """同步结果页面"""
+        if user_input is not None:
+            return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="sync_rooms_result",
+            data_schema=vol.Schema({}),
+            description_placeholders=self._sync_rooms_stats,
+        )
+
+    async def async_step_sync_rooms_error(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """同步失败页面"""
+        if user_input is not None:
+            return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="sync_rooms_error",
+            data_schema=vol.Schema({}),
+            description_placeholders={"error": self._sync_rooms_stats.get("error", "")},
         )
 
     async def async_step_link(self, user_input: dict[str, Any] | None = None) -> FlowResult:

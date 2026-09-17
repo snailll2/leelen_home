@@ -35,6 +35,8 @@
           "refresh": "同步设备",
           "link": "关联实体",
           "manage_links": "管理关联",
+          "gateway_ip": "网关 IP",
+          "sync_rooms": "同步房间",
           "cancel": "取消"
         }
       },
@@ -87,6 +89,18 @@
       "refresh_result": {
         "title": "同步完成",
         "description": "共发现设备 {total} 台\n新增设备：{added} 台\n移除设备：{removed} 台\n移除实体：{removed_entities} 个"
+      },
+      "sync_rooms": {
+        "title": "同步房间",
+        "description": "根据立林网关房间配置，将设备自动分配到 HA 区域。\n不会覆盖您手动设置的区域。"
+      },
+      "sync_rooms_result": {
+        "title": "房间同步完成",
+        "description": "发现房间 {rooms} 个\n新建区域 {areas_created} 个\n已分配设备 {devices_assigned} 台\n跳过（无房间信息）{devices_skipped_no_room} 台\n跳过（已有区域）{devices_skipped_has_area} 台\n跳过（未找到设备）{devices_skipped_no_device_entry} 台\n跳过（房间无区域）{devices_skipped_no_area} 台"
+      },
+      "sync_rooms_error": {
+        "title": "房间同步失败",
+        "description": "同步过程中出现错误：\n{error}"
       },
       "cancel": {
         "title": "已取消"

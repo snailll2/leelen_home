@@ -34,7 +34,9 @@
         "menu_options": {
           "refresh": "Sync Devices",
           "link": "Link Entities",
-          "manage_links": "Manage Links", 
+          "manage_links": "Manage Links",
+          "gateway_ip": "Gateway IP",
+          "sync_rooms": "Sync Rooms",
           "cancel": "Cancel"
         }
       },
@@ -86,6 +88,18 @@
       "refresh_result": {
         "title": "Sync Completed",
         "description": "Total devices found: {total}\nAdded devices: {added}\nRemoved devices: {removed}\nRemoved entities: {removed_entities}"
+      },
+      "sync_rooms": {
+        "title": "Sync Rooms",
+        "description": "Auto-assign devices to HA areas based on Leelen gateway room config.\nExisting manual area assignments are never overwritten."
+      },
+      "sync_rooms_result": {
+        "title": "Room Sync Completed",
+        "description": "Rooms found: {rooms}\nAreas created: {areas_created}\nDevices assigned: {devices_assigned}\nSkipped (no room info): {devices_skipped_no_room}\nSkipped (already has area): {devices_skipped_has_area}\nSkipped (device not found): {devices_skipped_no_device_entry}\nSkipped (no area for room): {devices_skipped_no_area}"
+      },
+      "sync_rooms_error": {
+        "title": "Room Sync Failed",
+        "description": "An error occurred during sync:\n{error}"
       },
       "cancel": {
         "title": "Canceled"

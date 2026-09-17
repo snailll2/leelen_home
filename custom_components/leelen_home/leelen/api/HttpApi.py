@@ -53,6 +53,7 @@ class HttpApi:
                     cls._instance = HttpApi(hass)
         return cls._instance
 
+
     def get_terminal_id(self):
         return hashlib.md5(''.join(random.choices(string.ascii_letters + string.digits, k=32)).encode()).hexdigest()
 
@@ -319,4 +320,13 @@ class HttpApi:
                 LogUtils.d(f"gateway ip {device}")
                 device["logic_srv"] = []
                 return device.get("val")
+
+    async def query_rooms(self, db_path: str = "dump.db"):
+        """查询房间表(含 room_id == 0 的「客厅」,与其他房间同等对待)。"""
+        async with aiosqlite.connect(db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "select room_id, room_name, floor_id from room_tbl order by room_id;")
+            all_rooms = await cursor.fetchall()
+            return [dict(row) for row in all_rooms]
 
