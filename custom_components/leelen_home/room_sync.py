@@ -143,9 +143,18 @@ async def sync_rooms_to_areas(hass, entry, *, re_download: bool = False) -> Sync
         async def _resolve_device(dev_addr: int):
             """按 LEELEN_HOME 标识解析 HA 设备。标识值可能是 int 或 str,逐个尝试。"""
             for candidate in (dev_addr, str(dev_addr)):
-                device = await _registry_call(
-                    drs, ("async_get_device",), identifiers={("LEELEN_HOME", candidate)}
-                )
+                identifier = ("LEELEN_HOME", candidate)
+                # 新版注册表:标识不再跨 config entry 唯一,async_get_device 已弃用,
+                # 改 async_get_device_by_identifier(2027.8 起移除);旧版仍用
+                # async_get_device(identifiers=set)。两者参数形态不同,分开传参。
+                if hasattr(drs, "async_get_device_by_identifier"):
+                    device = await _registry_call(
+                        drs, ("async_get_device_by_identifier",), identifier=identifier
+                    )
+                else:
+                    device = await _registry_call(
+                        drs, ("async_get_device",), identifiers={identifier}
+                    )
                 if device is not None:
                     return device
             # 兜底:类型漂移时按 str 值手动匹配(devices 在新旧版注册表里都暴露,再退私有表)
