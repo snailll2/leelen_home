@@ -1,20 +1,14 @@
-# # -*- coding: utf-8 -*-
-# """
-#
-# Light entities for Xiaomi Home.
-# """
+"""light 平台:无线灯(TYPE_WIRELESS_LIGHT)。"""
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from homeassistant.components.light import (
     LightEntity, ColorMode
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -23,35 +17,24 @@ from .const import DOMAIN
 from .leelen.common.LeelenType import FunctionType, FunctionValue, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinBaseState import LinBaseState
+from .platform_helper import async_setup_entry as _setup_platform
 from .state_subscription import StateUpdateSubscriber
-
-# from .miot.miot_spec import MIoTSpecProperty
-# from .miot.miot_device import MIoTDevice, MIoTEntityData,  MIoTServiceEntity
-# from .miot.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def setup_devices_from_db(hass, config_entry, async_add_entities):
-    device_list: list = hass.data[DOMAIN]['devices'].get(config_entry.entry_id) or []
-    # 注册设备
+def _build_entities(device_info, config_entry):
+    """按 logic_type 建实体:TYPE_WIRELESS_LIGHT→Light。"""
     entities = []
-    device_registry = dr.async_get(hass)
-    for device_info in device_list:
-        for logic_srv in device_info.get("logic_srv", []):
-            if logic_srv.get("logic_type") in [LogicDeviceType.TYPE_WIRELESS_LIGHT]:
-                entity = Light(logic_srv.get("logic_addr"),
-                               logic_srv.get("dev_addr"),
-                               logic_srv.get("logic_name"),
-                               device_info.get("dev_name"),
-                               config_entry)
-                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
-                entities.append(entity)
-    # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)
-    for entity in entities:
-        entity.subscribe_state_updates(hass)
-    # 添加实体到 HA
-    async_add_entities(entities)
+    for logic_srv in device_info.get("logic_srv", []):
+        if logic_srv.get("logic_type") in [LogicDeviceType.TYPE_WIRELESS_LIGHT]:
+            entities.append(Light(
+                logic_srv.get("logic_addr"),
+                logic_srv.get("dev_addr"),
+                logic_srv.get("logic_name"),
+                device_info.get("dev_name"),
+                config_entry))
+    return entities
 
 
 async def async_setup_entry(
@@ -60,30 +43,12 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up a config entry."""
-
-    await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    async def handle_refresh():
-        await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    # 保存 unsub,卸载时注销
-    config_entry.async_on_unload(
-        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
-    )
+    await _setup_platform(hass, config_entry, async_add_entities, _build_entities)
 
 
 class Light(StateUpdateSubscriber, LightEntity):
-    """Light entities for Xiaomi Home."""
+    """light 平台的无线灯实体。"""
     # pylint: disable=unused-argument
-    _VALUE_RANGE_MODE_COUNT_MAX = 30
-    # _prop_on: Optional[MIoTSpecProperty]
-    # _prop_brightness: Optional[MIoTSpecProperty]
-    # _prop_color_temp: Optional[MIoTSpecProperty]
-    # _prop_color: Optional[MIoTSpecProperty]
-    # _prop_mode: Optional[MIoTSpecProperty]
-
-    _brightness_scale: Optional[tuple[int, int]]
-    _mode_map: Optional[dict[Any, Any]]
     # name 属性返回完整名称,开启 _attr_has_entity_name 会导致名称被设备前缀重复
     _attr_color_mode = ColorMode.ONOFF
     _attr_supported_color_modes = {ColorMode.ONOFF}
@@ -109,10 +74,6 @@ class Light(StateUpdateSubscriber, LightEntity):
     @property
     def is_on(self) -> Optional[bool]:
         """Return if the light is on."""
-        # value_on = self.get_prop_value(prop=self._prop_on)
-        # # Dirty logic for lumi.gateway.mgl03 indicator light
-        # if isinstance(value_on, int):
-        #     value_on = value_on == 1
         return self._prop_on
 
     @property
@@ -127,36 +88,21 @@ class Light(StateUpdateSubscriber, LightEntity):
     def brightness(self) -> Optional[int]:
         """Return the brightness."""
         return None
-        # brightness_value = self.get_prop_value(prop=self._prop_brightness)
-        # if brightness_value is None:
-        #     return None
-        # return value_to_brightness(self._brightness_scale, brightness_value)
 
     @property
     def color_temp_kelvin(self) -> Optional[int]:
         """Return the color temperature."""
         return None
-        # return self.get_prop_value(prop=self._prop_color_temp)
 
     @property
     def rgb_color(self) -> Optional[tuple[int, int, int]]:
         """Return the rgb color value."""
         return None
-        # rgb = self.get_prop_value(prop=self._prop_color)
-        # if rgb is None:
-        #     return None
-        # r = (rgb >> 16) & 0xFF
-        # g = (rgb >> 8) & 0xFF
-        # b = rgb & 0xFF
-        # return r, g, b
 
     @property
     def effect(self) -> Optional[str]:
         """Return the current mode."""
         return None
-        # return self.get_map_value(
-        #     map_=self._mode_map,
-        #     key=self.get_prop_value(prop=self._prop_mode))
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the light on.
@@ -175,10 +121,6 @@ class Light(StateUpdateSubscriber, LightEntity):
                                                    FunctionValue.VALUE_OFF)
         self._prop_on = False
         self.async_write_ha_state()
-
-        # Dirty logic for lumi.gateway.mgl03 indicator light
-        # value_on = False if self._prop_on.format_ == bool else 0
-        # await self.set_property_async(prop=self._prop_on, value=value_on)
 
     async def update_state(self, state: LinBaseState):
         LogUtils.d(f"💡 {self._name} update {state}")

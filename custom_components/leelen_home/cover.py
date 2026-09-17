@@ -1,8 +1,4 @@
-# # -*- coding: utf-8 -*-
-# """
-#
-# Light entities for Xiaomi Home.
-# """
+"""cover 平台:无线窗帘(TYPE_WIRELESS_CURTAIN)。"""
 from __future__ import annotations
 
 import logging
@@ -11,8 +7,6 @@ from typing import Any
 from homeassistant.components.cover import CoverEntity, CoverDeviceClass, CoverEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -21,32 +15,24 @@ from .const import DOMAIN
 from .leelen.common.LeelenType import LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinCurtainMotorState import LinCurtainMotorState
+from .platform_helper import async_setup_entry as _setup_platform
 from .state_subscription import StateUpdateSubscriber
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def setup_devices_from_db(hass, config_entry, async_add_entities):
-    device_list: list = hass.data[DOMAIN]['devices'].get(config_entry.entry_id) or []
-    # 注册设备
+def _build_entities(device_info, config_entry):
+    """按 logic_type 建实体:TYPE_WIRELESS_CURTAIN→Cover。"""
     entities = []
-    device_registry = dr.async_get(hass)
-    for device_info in device_list:
-        for logic_srv in device_info.get("logic_srv", []):
-            if logic_srv.get("logic_type") in [LogicDeviceType.TYPE_WIRELESS_CURTAIN]:
-                entity = Cover(logic_srv.get("logic_addr"),
-                               logic_srv.get("dev_addr"),
-                               logic_srv.get("logic_name"),
-                               device_info.get("dev_name"),
-                               config_entry)
-                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
-                entities.append(entity)
-        # 为每个设备创建 Light 实体
-    # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)
-    for entity in entities:
-        entity.subscribe_state_updates(hass)
-    # 添加实体到 HA
-    async_add_entities(entities)
+    for logic_srv in device_info.get("logic_srv", []):
+        if logic_srv.get("logic_type") in [LogicDeviceType.TYPE_WIRELESS_CURTAIN]:
+            entities.append(Cover(
+                logic_srv.get("logic_addr"),
+                logic_srv.get("dev_addr"),
+                logic_srv.get("logic_name"),
+                device_info.get("dev_name"),
+                config_entry))
+    return entities
 
 
 async def async_setup_entry(
@@ -55,16 +41,7 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up a config entry."""
-
-    await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    async def handle_refresh():
-        await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    # 保存 unsub,卸载时注销
-    config_entry.async_on_unload(
-        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
-    )
+    await _setup_platform(hass, config_entry, async_add_entities, _build_entities)
 
 
 class Cover(StateUpdateSubscriber, CoverEntity):

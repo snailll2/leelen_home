@@ -1,18 +1,12 @@
-# # -*- coding: utf-8 -*-
-# """
-#
-# Light entities for Xiaomi Home.
-# """
+"""switch 平台:智能插座(Switch)与布防开关(VSwitch,支持实体联动)。"""
 from __future__ import annotations
 import time
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, State
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change
@@ -22,47 +16,41 @@ from .const import DOMAIN, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES
 from .leelen.common.LeelenType import FunctionType, FunctionValue, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinBaseState import LinBaseState
+from .platform_helper import async_setup_entry as _setup_platform
 from .state_subscription import StateUpdateSubscriber
-
-# from .miot.miot_spec import MIoTSpecProperty
-# from .miot.miot_device import MIoTDevice, MIoTEntityData,  MIoTServiceEntity
-# from .miot.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def setup_devices_from_db(hass, config_entry, async_add_entities):
-    device_list: list = hass.data[DOMAIN]['devices'].get(config_entry.entry_id) or []
+def _build_entities(device_info, config_entry):
+    """按 logic_type 建实体:智能插座→Switch,布防→VSwitch(绑定联动实体)。"""
     entities = []
-    device_registry = dr.async_get(hass)
     linked_entities = config_entry.options.get(OPTIONS_CONFIG, config_entry.data.get(OPTIONS_CONFIG, {})).get(OPTIONS_LINKED_ENTITIES, {})
     LogUtils.d(f"switch linked_entities: {linked_entities}")
+    for logic_srv in device_info.get("logic_srv", []):
+        if logic_srv.get("logic_type") in [LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET, 572]:
+            entities.append(Switch(
+                logic_srv.get("logic_addr"),
+                logic_srv.get("dev_addr"),
+                logic_srv.get("logic_name"),
+                device_info.get("dev_name"),
+                config_entry))
+        if logic_srv.get("logic_type") in [LogicDeviceType.ARM]:
+            entity = VSwitch(
+                logic_srv.get("logic_addr"),
+                logic_srv.get("dev_addr"),
+                logic_srv.get("logic_name"),
+                device_info.get("dev_name"),
+                config_entry)
+            LogUtils.d(f"vswitch entity: {entity} {entity.unique_id} {linked_entities}")
+            if entity.unique_id in linked_entities:
+                entity.set_linked_entity(linked_entities[entity.unique_id])
+            entities.append(entity)
+    return entities
 
-    for device_info in device_list:
-        for logic_srv in device_info.get("logic_srv", []):
-            if logic_srv.get("logic_type") in [LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET, 572]:
-                entity = Switch(logic_srv.get("logic_addr"),
-                                logic_srv.get("dev_addr"),
-                                logic_srv.get("logic_name"),
-                                device_info.get("dev_name"),
-                                config_entry)
-                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
-                entities.append(entity)
-            if logic_srv.get("logic_type") in [LogicDeviceType.ARM]:
-                entity = VSwitch(logic_srv.get("logic_addr"),
-                                logic_srv.get("dev_addr"),
-                                logic_srv.get("logic_name"),
-                                device_info.get("dev_name"),
-                                config_entry)
-                LogUtils.d(f"vswitch entity: {entity} {entity.unique_id} {linked_entities}")
-                if entity.unique_id in linked_entities:
-                    entity.set_linked_entity(linked_entities[entity.unique_id])
-                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
-                entities.append(entity)
-    for entity in entities:
-        entity.subscribe_state_updates(hass)
-    async_add_entities(entities)
 
+def _finalize_vswitch(entities, hass):
+    """实体添加后(初始与 refresh 各批)注册联动实体的状态监听。"""
     for entity in entities:
         if isinstance(entity, VSwitch) and entity.get_linked_entity():
             entity.register_state_listener()
@@ -74,30 +62,12 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up a config entry."""
-
-    await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    async def handle_refresh():
-        await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    # 保存 unsub,卸载时注销,避免 refresh 重复创建实体
-    config_entry.async_on_unload(
-        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
-    )
+    await _setup_platform(hass, config_entry, async_add_entities, _build_entities, finalize=_finalize_vswitch)
 
 
 class Switch(StateUpdateSubscriber, SwitchEntity):
-    """Light entities for Xiaomi Home."""
+    """switch 平台的智能插座实体。"""
     # pylint: disable=unused-argument
-    _VALUE_RANGE_MODE_COUNT_MAX = 30
-    # _prop_on: Optional[MIoTSpecProperty]
-    # _prop_brightness: Optional[MIoTSpecProperty]
-    # _prop_color_temp: Optional[MIoTSpecProperty]
-    # _prop_color: Optional[MIoTSpecProperty]
-    # _prop_mode: Optional[MIoTSpecProperty]
-
-    _brightness_scale: Optional[tuple[int, int]]
-    _mode_map: Optional[dict[Any, Any]]
     _attr_has_entity_name = True  # 推荐启用以符合最新命名规范
 
     def __init__(self, logic_addr, device_id: str, name: str,dev_name: str, config_entry: ConfigEntry):
@@ -110,8 +80,6 @@ class Switch(StateUpdateSubscriber, SwitchEntity):
         self._config_entry = config_entry
         self._power_usage = 0.0
 
-        # self._attr_icon = 'mdi:lightbulb-group'
-
     @property
     def unique_id(self) -> str:
         return f"leelen_logic_addr_{self._logic_addr}"
@@ -122,11 +90,7 @@ class Switch(StateUpdateSubscriber, SwitchEntity):
 
     @property
     def is_on(self) -> Optional[bool]:
-        """Return if the light is on."""
-        # value_on = self.get_prop_value(prop=self._prop_on)
-        # # Dirty logic for lumi.gateway.mgl03 indicator light
-        # if isinstance(value_on, int):
-        #     value_on = value_on == 1
+        """Return if the switch is on."""
         return self._prop_on
 
     @property
@@ -199,7 +163,7 @@ class VSwitch(Switch):
                     {"entity_id": self._linked_entity_id},
                     blocking=False
                 )
-            self._last_sync_time = _monotonic()
+            self._last_sync_time = time.monotonic()
         finally:
             self._is_syncing = False
 
@@ -210,7 +174,7 @@ class VSwitch(Switch):
 
         if entity_id != self._linked_entity_id:
             return
-        if time.time() - self._last_sync_time < 2.0:
+        if time.monotonic() - self._last_sync_time < 2.0:
             LogUtils.d(f"💡 {self._name} ignoring linked entity change (just synced)")
             return
         new_state = to_state.state in ("on", "open", "locked")

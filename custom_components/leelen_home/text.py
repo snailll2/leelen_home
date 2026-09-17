@@ -1,8 +1,4 @@
-# # -*- coding: utf-8 -*-
-# """
-#
-# Light entities for Xiaomi Home.
-# """
+"""text 平台:只读属性展示(按 PropertyId 命名的 property_* Text 实体)。"""
 from __future__ import annotations
 
 import logging
@@ -11,47 +7,36 @@ from typing import Optional
 from homeassistant.components.text import TextEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .leelen.common import PropertyId
-
-# from .miot.miot_spec import MIoTSpecProperty
-# from .miot.miot_device import MIoTDevice, MIoTEntityData,  MIoTServiceEntity
-# from .miot.const import DOMAIN
+from .platform_helper import async_setup_entry as _setup_platform
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def setup_devices_from_db(hass, config_entry, async_add_entities):
-    device_list: list = hass.data[DOMAIN]['devices'].get(config_entry.entry_id) or []
-    # 注册设备
+def _build_entities(device_info, config_entry):
+    """按已命名的 property_id 建只读 Text 实体(property_<属性名>)。"""
     entities = []
     # PropertyId.__dict__ 除属性外还含 __module__/__doc__ 等私有成员,统一跳过以下划线开头的键。
     property_ids = {
         attr: value for attr, value in PropertyId.__dict__.items()
         if not attr.startswith("_")
     }
-    for device_info in device_list:
-        dev_name = device_info.get("dev_name")
-        for property in device_info.get("all_property", []):
-            # if logic_srv.get("logic_type") in [LogicDeviceType.TYPE_WIRELESS_LIGHT]:
-            target_id = property.get("property_id")
-            for property_name, property_id in property_ids.items():
-                if property_id == target_id:
-                    entity = Text("property_" + property_name,
-                                  device_info.get("dev_addr"),
-                                  dev_name,
-                                  str(property.get("val")),
-                                  config_entry)
-                    hass.data[DOMAIN]["entities"][entity.unique_id] = entity
-                    entities.append(entity)
-        # 为每个设备创建 Light 实体
-    # 添加实体到 HA
-    async_add_entities(entities)
+    dev_name = device_info.get("dev_name")
+    for property in device_info.get("all_property", []):
+        target_id = property.get("property_id")
+        for property_name, property_id in property_ids.items():
+            if property_id == target_id:
+                entities.append(Text(
+                    "property_" + property_name,
+                    device_info.get("dev_addr"),
+                    dev_name,
+                    str(property.get("val")),
+                    config_entry))
+    return entities
 
 
 async def async_setup_entry(
@@ -60,16 +45,7 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up a config entry."""
-
-    await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    async def handle_refresh():
-        await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    # 保存 unsub,卸载时注销
-    config_entry.async_on_unload(
-        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
-    )
+    await _setup_platform(hass, config_entry, async_add_entities, _build_entities)
 
 
 class Text(TextEntity):

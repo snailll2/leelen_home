@@ -15,6 +15,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from . import room_sync
 from .const import DOMAIN, OPTIONS_SELECT, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES, CONF_GATEWAY_IP
 from .leelen.api.HttpApi import HttpApi
+from .platform_helper import SIGNAL_DEVICE_REFRESH
 from .leelen.utils.LogUtils import LogUtils
 
 _LOGGER = logging.getLogger(__name__)
@@ -207,7 +208,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     removed_entities += 1
 
             # 触发实体更新
-            async_dispatcher_send(self.hass, "leelen_integration_device_refresh")
+            async_dispatcher_send(self.hass, SIGNAL_DEVICE_REFRESH)
 
             # 计算统计信息：新增 = 当前设备 - 已有设备
             added = len(current_device_ids - existing_device_ids)

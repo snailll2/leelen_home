@@ -1,8 +1,4 @@
-# # -*- coding: utf-8 -*-
-# """
-#
-# Light entities for Xiaomi Home.
-# """
+"""climate 平台:中心空调/地暖/新风(SUPPORTED_LOGIC_TYPES)。"""
 from __future__ import annotations
 
 import logging
@@ -14,17 +10,17 @@ from homeassistant.components.climate import ClimateEntity, HVACMode, ClimateEnt
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .leelen.states.LinCenterAcState import LinCenterAcState
 from . import LogUtils
 from .const import DOMAIN, HVAC_MODE_MAP, FAN_MODE_SPEED_MAP, SPEED_FAN_MODE_MAP, MODE_HVAC_MAP
 from .leelen.common.LeelenType import FunctionType, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
+from .leelen.states.LinCenterAcState import LinCenterAcState
 from .leelen.states.LinSensorState import LinSensorState
+from .platform_helper import async_setup_entry as _setup_platform
 from .state_subscription import StateUpdateSubscriber
 
 
@@ -56,25 +52,18 @@ SUPPORTED_LOGIC_TYPES = [
 
 ]
 
-async def setup_devices_from_db(hass, config_entry, async_add_entities):
-    device_list: list = hass.data[DOMAIN]['devices'].get(config_entry.entry_id) or []
-    # 注册设备
+def _build_entities(device_info, config_entry):
+    """按 SUPPORTED_LOGIC_TYPES 建实体:中心空调/地暖/新风统一为 Climate。"""
     entities = []
-    for device_info in device_list:
-        for logic_srv in device_info.get("logic_srv", []):
-            if logic_srv.get("logic_type") in SUPPORTED_LOGIC_TYPES:
-                entity = Climate(logic_srv.get("logic_addr"),
-                                 logic_srv.get("dev_addr"),
-                                 logic_srv.get("logic_name"),
-                                 device_info.get("dev_name"),
-                                 config_entry)
-                hass.data[DOMAIN]["entities"][entity.unique_id] = entity
-                entities.append(entity)
-    # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)
-    for entity in entities:
-        entity.subscribe_state_updates(hass)
-    # 添加实体到 HA
-    async_add_entities(entities)
+    for logic_srv in device_info.get("logic_srv", []):
+        if logic_srv.get("logic_type") in SUPPORTED_LOGIC_TYPES:
+            entities.append(Climate(
+                logic_srv.get("logic_addr"),
+                logic_srv.get("dev_addr"),
+                logic_srv.get("logic_name"),
+                device_info.get("dev_name"),
+                config_entry))
+    return entities
 
 
 async def async_setup_entry(
@@ -83,16 +72,7 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up a config entry."""
-
-    await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    async def handle_refresh():
-        await setup_devices_from_db(hass, config_entry, async_add_entities)
-
-    # 保存 unsub,卸载时注销,避免 refresh 分发重复添加实体
-    config_entry.async_on_unload(
-        async_dispatcher_connect(hass, "leelen_integration_device_refresh", handle_refresh)
-    )
+    await _setup_platform(hass, config_entry, async_add_entities, _build_entities)
 
 
 class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
@@ -205,11 +185,7 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
 
     @property
     def is_on(self) -> Optional[bool]:
-        """Return if the light is on."""
-        # value_on = self.get_prop_value(prop=self._prop_on)
-        # # Dirty logic for lumi.gateway.mgl03 indicator light
-        # if isinstance(value_on, int):
-        #     value_on = value_on == 1
+        """Return if the climate is on."""
         return self._prop_on
 
     @property
@@ -339,20 +315,6 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
     def set_humidity(self, humidity):
         return False
 
-    #
-    # @property
-    # def swing_mode(self):
-    #     val = 0
-    #     return SwingModes(val).name
-    #
-    # @property
-    # def swing_modes(self):
-    #     lst = [SwingModes(0).name]
-    #     return lst
-    #
-    # def set_swing_mode(self, swing_mode: str):
-    #     return None
-    
     async def async_set_humidity(self, humidity: int) -> None:
         pass
 
