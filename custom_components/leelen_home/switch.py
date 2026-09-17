@@ -24,9 +24,10 @@ _LOGGER = logging.getLogger(__name__)
 
 def _build_entities(device_info, config_entry):
     """按 logic_type 建实体:智能插座→Switch,布防→VSwitch(绑定联动实体)。"""
+    # linked_entities 是配置项级的(整个集成一份),在每台设备的循环里重复读取即可,
+    # 但不再逐设备打 DEBUG(有 N 台设备就刷 N 条相同日志)。
     entities = []
     linked_entities = config_entry.options.get(OPTIONS_CONFIG, config_entry.data.get(OPTIONS_CONFIG, {})).get(OPTIONS_LINKED_ENTITIES, {})
-    LogUtils.d(f"switch linked_entities: {linked_entities}")
     for logic_srv in device_info.get("logic_srv", []):
         if logic_srv.get("logic_type") in [LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET, 572]:
             entities.append(Switch(
