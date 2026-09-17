@@ -33,7 +33,7 @@ sensors — into Home Assistant. Device control can run **directly over LAN** or
 | **Climate** | Central air-conditioner control |
 | **Cover** | Wireless curtain motor |
 | **Light** | Wireless light switch |
-| **Switch** | Zigbee smart wall socket + arm/disarm switch (VSwitch) |
+| **Switch** | Zigbee smart wall socket + V switch device (VSwitch) |
 | **Sensor** | Temperature, humidity, PM2.5 sensors |
 
 ### Options menu
@@ -43,7 +43,7 @@ Configure anything from **Settings → Devices & Services → Leelen Home → Op
 | Menu item | What it does |
 |-----------|--------------|
 | **Refresh** | Re-fetch the device list from the cloud / gateway and rebuild entities |
-| **Link / Manage Links** | Link a VSwitch (arm/disarm switch) to any other HA entity by its `entity_id` — toggling the switch drives the linked entity's state (e.g. one master arm switch for the whole house) |
+| **Link / Manage Links** | Link a V switch device (VSwitch) to any other HA entity by its `entity_id` — toggling the switch drives the linked entity's state (e.g. one master arm switch for the whole house) |
 | **Gateway IP** | Manually override the gateway LAN IP. Use this when the gateway changed IP via DHCP but the cloud `dump.db` still reports a stale address |
 | **Sync Rooms** | Push your Leelen room structure into Home Assistant **areas** automatically (also runs in the background at setup) |
 | **Connection Mode** | Switch between LAN / WAN — see above |
@@ -78,11 +78,11 @@ Requires **Home Assistant 2024.1.0 or newer**.
 
 > The account must have the gateway bound in the official **Leelen App** (立林智能 / 立林家) before setup.
 
-### Entity linking (VSwitch)
+### V switch device entity linking
 
-1. **Options → Link** and pick the VSwitch entity
+1. **Options → Link** and pick the V switch device entity
 2. Pick the target entity by its `entity_id` (any platform)
-3. When the VSwitch turns on/off, the linked entity follows the same state — handy for a "master arm" switch in automations or dashboards.
+3. When the V switch device turns on/off, the linked entity follows the same state — handy for a "master arm" switch in automations or dashboards.
 
 ### Gateway IP override (`gateway_ip`)
 

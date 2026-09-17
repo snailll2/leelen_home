@@ -302,7 +302,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         )
 
     async def async_step_link(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """选择要关联的 VSwitch 设备"""
+        """选择要关联的 V设备"""
         entity_registry = er.async_get(self.hass)
         vswitch_entities = []
         self._entity_id_to_unique_id = {}

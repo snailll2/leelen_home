@@ -47,11 +47,11 @@
       },
       "link": {
         "title": "关联实体",
-        "description": "选择一个 VSwitch 设备进行关联"
+        "description": "选择一个 V设备进行关联"
       },
       "link_no_vswitch": {
         "title": "关联实体",
-        "description": "未找到 VSwitch 设备"
+        "description": "未找到 V设备"
       },
       "select_linked": {
         "title": "选择关联实体",
@@ -71,11 +71,11 @@
       },
       "link_actions": {
         "title": "关联操作",
-        "description": "VSwitch: {vswitch_name}\n当前关联: {linked_name}"
+        "description": "V设备: {vswitch_name}\n当前关联: {linked_name}"
       },
       "modify_linked": {
         "title": "修改关联",
-        "description": "VSwitch: {vswitch_name}\n选择新的 HA 实体进行关联"
+        "description": "V设备: {vswitch_name}\n选择新的 HA 实体进行关联"
       },
       "modify_linked_no_entity": {
         "title": "修改关联",
@@ -83,10 +83,8 @@
       },
       "delete_confirm": {
         "title": "确认删除",
-        "description": "确认删除此关联？\n\nVSwitch: {vswitch_name}\n关联实体: {linked_name}"
+        "description": "确认删除此关联？\n\nV设备: {vswitch_name}\n关联实体: {linked_name}"
       },
-
-
       "refresh_result": {
         "title": "同步完成",
         "description": "共发现设备 {total} 台\n新增设备：{added} 台\n移除设备：{removed} 台\n移除实体：{removed_entities} 个"

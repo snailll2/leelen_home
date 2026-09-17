@@ -1,4 +1,4 @@
-"""switch 平台:智能插座(Switch)与布防开关(VSwitch,支持实体联动)。"""
+"""switch 平台:智能插座(Switch)与 V设备(VSwitch,支持实体联动)。"""
 from __future__ import annotations
 import time
 import logging
@@ -23,7 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _build_entities(device_info, config_entry):
-    """按 logic_type 建实体:智能插座→Switch,布防→VSwitch(绑定联动实体)。"""
+    """按 logic_type 建实体:智能插座→Switch,V设备→VSwitch(绑定联动实体)。"""
     # linked_entities 是配置项级的(整个集成一份),在每台设备的循环里重复读取即可,
     # 但不再逐设备打 DEBUG(有 N 台设备就刷 N 条相同日志)。
     entities = []

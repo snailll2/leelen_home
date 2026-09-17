@@ -47,11 +47,11 @@
       },
       "link": {
         "title": "Link Entities",
-        "description": "Select a VSwitch device to link"
+        "description": "Select a V switch device to link"
       },
       "link_no_vswitch": {
         "title": "Link Entities",
-        "description": "No VSwitch devices found"
+        "description": "No V switch devices found"
       },
       "select_linked": {
         "title": "Select Linked Entity",
@@ -71,11 +71,11 @@
       },
       "link_actions": {
         "title": "Link Actions",
-        "description": "VSwitch: {vswitch_name}\nCurrent link: {linked_name}"
+        "description": "V switch device: {vswitch_name}\nCurrent link: {linked_name}"
       },
       "modify_linked": {
         "title": "Modify Link",
-        "description": "VSwitch: {vswitch_name}\nSelect new HA entity to link"
+        "description": "V switch device: {vswitch_name}\nSelect new HA entity to link"
       },
       "modify_linked_no_entity": {
         "title": "Modify Link",
@@ -83,9 +83,8 @@
       },
       "delete_confirm": {
         "title": "Confirm Delete",
-        "description": "Confirm delete this link?\n\nVSwitch: {vswitch_name}\nLinked entity: {linked_name}"
+        "description": "Confirm delete this link?\n\nV switch device: {vswitch_name}\nLinked entity: {linked_name}"
       },
-      
       "refresh_result": {
         "title": "Sync Completed",
         "description": "Total devices found: {total}\nAdded devices: {added}\nRemoved devices: {removed}\nRemoved entities: {removed_entities}"
