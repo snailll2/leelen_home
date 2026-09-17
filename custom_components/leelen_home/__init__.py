@@ -4,7 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from . import room_sync
-from .const import DOMAIN, SUPPORTED_PLATFORMS, CONF_PHONE, OPTIONS_CONFIG, CONF_DEVICE_ADDR, CONF_GATEWAY_IP
+from .const import DOMAIN, SUPPORTED_PLATFORMS, OPTIONS_CONFIG, CONF_DEVICE_ADDR, CONF_GATEWAY_IP
 from .leelen.api.HttpApi import HttpApi
 from .leelen.utils.LogUtils import LogUtils
 from .service import LeelenService
@@ -17,11 +17,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     LogUtils.d(__name__, entry.data)
 
     hass.data[DOMAIN].setdefault('devices', {})
-    # {[entry_id:str]: entities}
-    hass.data[DOMAIN].setdefault('entities', {})
-
-    for platform in SUPPORTED_PLATFORMS:
-        hass.data[DOMAIN]['entities'][platform] = []
 
     device_addr = entry.data[CONF_DEVICE_ADDR]
 
@@ -65,17 +60,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 停止服务并清理数据
     data = hass.data[DOMAIN].get(entry.entry_id)
     if data is not None:
-        data["service"].stop()
+        # stop() 内部会 join 心跳/接收/线程池等后台线程,同步调用会卡死事件循环
+        # (与 service.async_restart 一致,放到执行器线程执行)。
+        await hass.async_add_executor_job(data["service"].stop)
         hass.data[DOMAIN].pop(entry.entry_id)
     
-    # 清理设备和实体数据
+    # 清理设备数据
     if entry.entry_id in hass.data[DOMAIN].get('devices', {}):
         hass.data[DOMAIN]['devices'].pop(entry.entry_id)
-    
-    # 清理entities字典
-    if 'entities' in hass.data[DOMAIN]:
-        hass.data[DOMAIN]['entities'] = {}
-    
+
     # 如果没有更多的条目，清理整个DOMAIN数据
     if not hass.data[DOMAIN].get('devices', {}):
         hass.data.pop(DOMAIN)

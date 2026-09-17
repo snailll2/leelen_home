@@ -1,10 +1,9 @@
 """各平台实体的 setup/refresh 通用逻辑。
 
 light/switch/sensor/cover/climate/text 六个平台里叠了同一段样板:
-遍历 ``hass.data[DOMAIN]["devices"]`` → 按条件 new 实体 → 注册进
-``hass.data[DOMAIN]["entities"]`` → 逐个 ``subscribe_state_updates`` →
-``async_add_entities``;``async_setup_entry`` 里再挂一条 device_refresh 的
-dispatcher,卸载时经 ``async_on_unload`` 注销。
+遍历 ``hass.data[DOMAIN]["devices"]`` → 按条件 new 实体 → 逐个
+``subscribe_state_updates`` → ``async_add_entities``;``async_setup_entry``
+里再挂一条 device_refresh 的 dispatcher,卸载时经 ``async_on_unload`` 注销。
 
 差异只发生在「要不要为这条设备记录建实体、建哪些」,即 ``build_entities`` 回调。
 本模块把样板收敛成两个入口,各平台只写工厂函数:
@@ -30,7 +29,7 @@ async def setup_devices_from_db(
     async_add_entities: AddEntitiesCallback,
     build_entities,
 ) -> list:
-    """遍历设备库,建实体,注册进 entities map,订阅状态更新并添加。
+    """遍历设备库,建实体,订阅状态更新并添加。
 
     ``build_entities(device_info, config_entry)`` 返回单个实体、实体列表或 None;
     返回 None/空表不建实体(text 平台按 all_property 建,同样走这里)。
@@ -47,7 +46,6 @@ async def setup_devices_from_db(
         for entity in created:
             if entity is None:
                 continue
-            hass.data[DOMAIN]["entities"][entity.unique_id] = entity
             entities.append(entity)
 
     # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)。

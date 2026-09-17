@@ -45,6 +45,10 @@ class StateUpdateSubscriber:
     _state_unsub = None
 
     def subscribe_state_updates(self, hass) -> None:
+        # 防御:同一实例二次订阅前先退掉旧的,避免残留回调导致事件重复派发。
+        if self._state_unsub:
+            self._state_unsub()
+            self._state_unsub = None
         self._state_unsub = async_dispatcher_connect(
             hass, SIGNAL_STATE_UPDATE, self._handle_state_event
         )

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from types import MappingProxyType
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
@@ -13,6 +14,8 @@ from .leelen.HeartbeatService import HeartbeatService
 from .leelen.entity.GatewayInfo import GatewayInfo
 from .leelen.entity.User import User
 from .leelen.utils.LogUtils import LogUtils
+
+_LOGGER = logging.getLogger(__name__)
 
 _NOTIFICATION_ID = "leelen_connection_status"
 
@@ -90,7 +93,8 @@ class LeelenService:
     async def _update_notification(self, status: str) -> None:
         """按真实状态写/更新 persistent_notification(同一条,id 一致会覆盖)。"""
         addr = self._config.get(CONF_DEVICE_ADDR)
-        ip = self._hass.data[DOMAIN].get(CONF_GATEWAY_IP)
+        # unload 后 DOMAIN 可能已被 pop,读不到时按空值降级,避免 KeyError 炸掉监控任务。
+        ip = self._hass.data.get(DOMAIN, {}).get(CONF_GATEWAY_IP)
         if status == "connected":
             message = f"网关{addr} ({ip}) 本地连接状态: 已连接"
         elif status == "failed":
@@ -103,19 +107,28 @@ class LeelenService:
             message = f"网关{addr} ({ip}) 本地连接已断开。"
         else:  # connecting
             message = f"网关{addr} ({ip}) 正在连接..."
-        await self._hass.services.async_call(
-            "persistent_notification",
-            "create",
-            {
-                "notification_id": _NOTIFICATION_ID,
-                "message": message,
-                "title": "立林网关连接状态",
-            },
-        )
+        try:
+            await self._hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "notification_id": _NOTIFICATION_ID,
+                    "message": message,
+                    "title": "立林网关连接状态",
+                },
+            )
+        except Exception:  # noqa: BLE001 - 通知失败不应弄死整个监控任务
+            _LOGGER.warning("connection monitor: persistent_notification 更新失败(status=%s)", status)
 
     def stop(self) -> None:
         """Stop the service, called when component stops."""
         LogUtils.i(f"{LeelenService.__name__} stop")
+        # 先取消监控任务:stop() 在 unload(执行器线程)与 async_restart 里都会走到,
+        # 用 call_soon_threadsafe 在事件循环里取消,避免任务继续按 2s 轮询
+        # (lan_conn_close 置空 connect_lan 后它也会自然退出,但显式取消更确定)。
+        if self._monitor_task:
+            self._hass.loop.call_soon_threadsafe(self._monitor_task.cancel)
+            self._monitor_task = None
         try:
             hs = HeartbeatService.get_instance()
             # 关闭 LAN/WAN 连接(内部会停止心跳/接收线程并关 socket,并各自释放单例)。
