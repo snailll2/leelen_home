@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import LogUtils
-from .const import DOMAIN, HVAC_MODE_MAP, FAN_MODE_SPEED_MAP, SPEED_FAN_MODE_MAP, MODE_HVAC_MAP
+from .const import HVAC_MODE_MAP, FAN_MODE_SPEED_MAP, SPEED_FAN_MODE_MAP, MODE_HVAC_MAP
 from .leelen.common.LeelenType import FunctionType, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinCenterAcState import LinCenterAcState

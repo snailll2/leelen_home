@@ -13,7 +13,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from . import room_sync
-from .const import DOMAIN, OPTIONS_SELECT, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES, CONF_GATEWAY_IP
+from .const import DOMAIN, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES, CONF_GATEWAY_IP
 from .leelen.api.HttpApi import HttpApi
 from .platform_helper import SIGNAL_DEVICE_REFRESH
 from .leelen.utils.LogUtils import LogUtils

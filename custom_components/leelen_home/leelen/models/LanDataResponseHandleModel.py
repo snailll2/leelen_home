@@ -9,7 +9,6 @@ from ..common.SingletonMixin import SingletonMixin
 from ..entity.GatewayInfo import GatewayInfo
 from ..entity.ConfigModifyInfo import ConfigModifyInfo
 from ..entity.Message import Message
-from ..entity.ack.ConfigModAck import ConfigModAck
 from ..entity.ack.FetchConfigModAck import FetchConfigModAck
 from ..entity.ack.ModInfo import ModInfo
 from ..entity.dao.AckToDao import AckToDao

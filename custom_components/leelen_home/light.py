@@ -13,7 +13,6 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import LogUtils
-from .const import DOMAIN
 from .leelen.common.LeelenType import FunctionType, FunctionValue, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinBaseState import LinBaseState

@@ -158,7 +158,6 @@ class ConnectLan(SingletonMixin, BaseConnect):
                 try:
                     socket.settimeout(0)  # Set socket to blocking mode (no timeout)
                 except Exception as e:
-                    import traceback
                     LogUtils.e(e)
                 self.logon()
                 return

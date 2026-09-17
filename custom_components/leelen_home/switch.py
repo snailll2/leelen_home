@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change
 
 from . import LogUtils
-from .const import DOMAIN, OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES
+from .const import OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES
 from .leelen.common.LeelenType import FunctionType, FunctionValue, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinBaseState import LinBaseState

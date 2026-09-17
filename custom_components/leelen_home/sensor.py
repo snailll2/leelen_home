@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
@@ -14,7 +14,6 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import LogUtils
-from .const import DOMAIN
 from .leelen.common.LeelenType import LogicDeviceType
 from .leelen.states.LinSensorState import LinSensorState
 from .platform_helper import async_setup_entry as _setup_platform
