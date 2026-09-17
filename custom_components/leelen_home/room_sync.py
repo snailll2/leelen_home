@@ -146,10 +146,17 @@ async def sync_rooms_to_areas(hass, entry, *, re_download: bool = False) -> Sync
                 identifier = ("LEELEN_HOME", candidate)
                 # 新版注册表:标识不再跨 config entry 唯一,async_get_device 已弃用,
                 # 改 async_get_device_by_identifier(2027.8 起移除);旧版仍用
-                # async_get_device(identifiers=set)。两者参数形态不同,分开传参。
+                # async_get_device(identifiers=set)。
                 if hasattr(drs, "async_get_device_by_identifier"):
+                    # 新 API 必须显式传 config_entry_id(标识不再全局唯一);
+                    # 2026 之前的旧版签名只有 identifier,按签名择一传参避免 TypeError。
+                    kwargs = {"identifier": identifier}
+                    if "config_entry_id" in inspect.signature(
+                        drs.async_get_device_by_identifier
+                    ).parameters:
+                        kwargs["config_entry_id"] = entry.entry_id
                     device = await _registry_call(
-                        drs, ("async_get_device_by_identifier",), identifier=identifier
+                        drs, ("async_get_device_by_identifier",), **kwargs
                     )
                 else:
                     device = await _registry_call(
