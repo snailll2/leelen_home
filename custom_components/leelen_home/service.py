@@ -136,7 +136,7 @@ class LeelenService:
         elif status == "failed":
             message = (
                 f"网关{addr} ({ip}) {channel}登录失败,正在重试。\n"
-                "若持续失败,请检查「设备地址」是否正确、账号是否已在立林 App "
+                "若持续失败,请检查「设备地址」是否正确、账号是否已在「小立管家」"
                 "绑定该网关,并确认网关在线。"
             )
         elif status == "disconnected":

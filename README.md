@@ -3,121 +3,124 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0-blue.svg)](https://www.home-assistant.io/)
 
-**中文** | [English](README_EN.md)
+**English** | [中文](README_CN.md)
 
-Home Assistant 的 **立林(Leelen)智能家居**集成,适配立林 IoT 2.0 网关。
+Home Assistant integration for **Leelen (立林)** smart home devices (IoT 2.0 gateways).
 
-把立林网关下的中央空调、窗帘、灯光、智能插座与传感器接入 Home Assistant。控制既可以走**局域网(LAN)直连**,也可以走**互联网(WAN)云端透传**,随时可在集成选项里切换。
-
----
-
-## ✨ 功能特性
-
-### 双连接模式(`connect_mode`)
-
-| 模式 | 说明 | 适用场景 |
-|------|------|----------|
-| **LAN(局域网)** | 设备帧通过 TCP + TLS 直接发给局域网内的网关 | 速度最快、不依赖外网;需要 HA 主机能访问到网关 IP |
-| **WAN(互联网)** | 设备帧经立林云端做透传(pass-through)转发 | 跨网段 / 网关与 HA 不在同一局域网时 |
-
-- 随时可在 **选项 → 连接方式** 里切换;保存即生效(集成自动重载)。
-- WAN 模式下集成**完全不建立本地连接**,状态回程全部走云端隧道,干净无干扰。
-- 默认 `LAN`,老用户行为不变。
-
-### 设备平台
-
-| 平台 | 设备 |
-|------|------|
-| **Climate**(空调) | 中央空调控制 |
-| **Cover**(窗帘) | 无线窗帘电机 |
-| **Light**(灯光) | 无线灯光 |
-| **Switch**(开关) | Zigbee 智能插座 + V设备(VSwitch) |
-| **Sensor**(传感器) | 温湿度、PM2.5 传感器 |
-
-### 选项菜单
-
-在 **设置 → 设备与服务 → Leelen Home → 选项** 中配置:
-
-| 菜单项 | 作用 |
-|--------|------|
-| **刷新(Refresh)** | 从云端/网关重新拉取设备列表并重建实体 |
-| **关联(Link) / 管理关联(Manage Links)** | 把 V设备(VSwitch)联动到任意 HA 实体(`entity_id`)——开关联动即驱动对方状态,一个开关实现全屋布防 |
-| **网关 IP(Gateway IP)** | 手动覆盖网关局域网 IP。网关 DHCP 换 IP 而云端 `dump.db` 仍记录旧地址时使用 |
-| **同步房间(Sync Rooms)** | 将立林房间结构自动同步为 Home Assistant 的**区域**(setup 时也会后台自动跑) |
-| **连接方式(Connection Mode)** | 切换 LAN / WAN,见上文 |
-
-选项保存即生效(自动重载),无需手动 Reload。
+Connect your Leelen gateway — central AC, curtains, lights, smart wall sockets and
+sensors — into Home Assistant. Device control can run **directly over LAN** or
+**through the internet (WAN)**; you switch at any time from the integration options.
 
 ---
 
-## 📦 安装
+## ✨ Features
 
-要求 **Home Assistant 2024.1.0 或更新版本**。
+### Connection modes (`connect_mode`)
 
-### HACS(推荐)
+| Mode | How it works | When to use |
+|------|--------------|-------------|
+| **LAN (local)** | Device frames are sent directly to the gateway on the local network over TCP + TLS | Fastest, no internet dependency; requires your HA host to reach the gateway IP on your LAN |
+| **WAN (internet)** | Device frames are tunneled through the Leelen cloud (pass-through) | Cross-network / when the gateway is not on the same segment as HA |
 
-1. HACS → 集成 → “+” → 自定义仓库
-2. 添加 `https://github.com/snailll2/leelen_home`(类别:**Integration**)
-3. 点击 **Download**,然后重启 Home Assistant
+- Switchable any time from **Options → Connection Mode**; saving takes effect immediately (the integration auto-reloads).
+- In WAN mode the integration establishes **no local connection** at all, so state updates return cleanly over the cloud tunnel.
+- Default is `LAN` — existing users' behavior is unchanged.
 
-### 手动安装
+### Device platforms
 
-1. 把 `custom_components/leelen_home/` 复制到 HA 的 `config/custom_components/` 下
-2. 重启 Home Assistant
+| Platform | Devices |
+|----------|---------|
+| **Climate** | Central air-conditioner control |
+| **Cover** | Wireless curtain motor |
+| **Light** | Wireless light switch |
+| **Switch** | Zigbee smart wall socket + V switch device (VSwitch) |
+| **Sensor** | Temperature, humidity, PM2.5 sensors |
 
----
+### Options menu
 
-## ⚙️ 配置
+Configure anything from **Settings → Devices & Services → Leelen Home → Options**:
 
-1. **设置 → 设备与服务 → 添加集成**,搜索 **“Leelen Home”**
-2. 输入已绑定立林账号的**手机号**
-3. 输入手机收到的**短信验证码**
-4. 集成登录、发现绑定的网关,并为在线设备创建实体
+| Menu item | What it does |
+|-----------|--------------|
+| **Refresh** | Re-fetch the device list from the cloud / gateway and rebuild entities |
+| **Link / Manage Links** | Link a V switch device (VSwitch) to any other HA entity by its `entity_id` — toggling the switch drives the linked entity's state (e.g. one master arm switch for the whole house) |
+| **Gateway IP** | Manually override the gateway LAN IP. Use this when the gateway changed IP via DHCP but the cloud `dump.db` still reports a stale address |
+| **Sync Rooms** | Push your Leelen room structure into Home Assistant **areas** automatically (also runs in the background at setup) |
+| **Connection Mode** | Switch between LAN / WAN — see above |
 
-> 配置前,账号须先在官方**立林智能 / 立林家 App**里绑定好对应网关。
-
-### V设备实体联动
-
-1. **选项 → 关联** 选择 V设备实体
-2. 按 `entity_id` 选择目标实体(任意平台)
-3. V设备打开/关闭时,被联动实体跟随同一状态——适合在自动化或仪表盘里做「总布防开关」
-
-### 网关 IP 手工覆盖(`gateway_ip`)
-
-网关 DHCP 重新分配后,云端 `dump.db` 偶尔会保留旧局域网 IP,导致设备「离线」。若网关实际在线:
-
-1. 确认网关当前真实 IP(例如到路由器 DHCP 客户端列表里查)
-2. **选项 → 网关 IP** 填入并保存
-
-覆盖值优先于云端下发的地址。
+Any option save triggers an automatic reload ("save-now-effective"), so no manual `Reload` is needed.
 
 ---
 
-## 🛠 故障排查
+## 📦 Installation
 
-### LAN 模式:控制不了 / 设备不可达
+Requires **Home Assistant 2024.1.0 or newer**.
 
-- 确认网关确实在配置的 IP 上:HA 主机上 `ping <网关IP>`。
-- 网关 IP 可能被 DHCP 重新分配——查路由器客户端列表,更新 **选项 → 网关 IP**。
-- 注意:云端 `dump.db` 可能上报一个过期的「幽灵 IP」——能 ping 通但连云失败。应以路由器确认的 IP 为准,或扫网关 TCP 端口(`49153`)确认。
-- WAN 模式经互联网访问网关,与局域网不可达无关——网络段变了就切换连接方式。
+### HACS (recommended)
 
-### 设备不显示
+1. Open HACS → Integrations → “+” → custom repository
+2. Add `https://github.com/snailll2/leelen_home` (category: **Integration**)
+3. Click **Download**, then restart Home Assistant
 
-- 试试 **选项 → 刷新** 重新拉取设备。
-- 确认设备在立林 App 里在线、且绑定在同一个网关下。
+### Manual
 
-### 登录失败
+1. Copy `custom_components/leelen_home/` into your Home Assistant `config/custom_components/`
+2. Restart Home Assistant
 
-- 短信验证码有效期很短,失败及时重新获取。
-- 确认账号拥有/绑定了待配置的网关。
+---
 
-### 还搞不定?
+## ⚙️ Configuration
 
-带 `home-assistant.log` 里 `custom_components/leelen_home`(或 `Leelen` logger)的日志片段,开一个 [issue](https://github.com/snailll2/leelen_home/issues)。
+1. Go to **Settings → Devices & Services → Add Integration** and search for **“Leelen Home”**
+2. Enter the **phone number** bound to your Leelen account
+3. Enter the **SMS verification code** received on that phone
+4. The integration logs in, discovers the bound gateway, and creates entities for the online devices
+
+> The account must have the gateway bound in the official **Leelen Home (小立管家) App** before setup.
+
+### V switch device entity linking
+
+1. **Options → Link** and pick the V switch device entity
+2. Pick the target entity by its `entity_id` (any platform)
+3. When the V switch device turns on/off, the linked entity follows the same state — handy for a "master arm" switch in automations or dashboards.
+
+### Gateway IP override (`gateway_ip`)
+
+Cloud `dump.db` sometimes reports a stale LAN IP for the gateway after a DHCP re-lease. If devices go offline while the gateway is actually online:
+
+1. Find the gateway's real current IP (e.g. from your router's DHCP client list)
+2. **Options → Gateway IP**, enter it, save.
+
+The override wins over the cloud-provided value.
+
+---
+
+## 🛠 Troubleshooting
+
+### LAN mode: "cannot control / devices unreachable"
+
+- Confirm the gateway is actually at the configured IP: `ping <gateway-ip>` from the HA host.
+- The gateway IP may have changed via DHCP — check your router's client list and update **Options → Gateway IP**.
+- Note that cloud `dump.db` may report a stale/phantom IP that answers ping but connects nothing — prefer an IP confirmed from your router or by scanning for the gateway's TCP port (`49153`).
+- In WAN mode the gateway is reached through the internet, so LAN reachability is irrelevant — switch modes if the network segment changed.
+
+### Devices not showing up
+
+- Try **Options → Refresh** to re-fetch devices.
+- Verify the devices are online/paired in the Leelen app and bound to the same gateway.
+
+### Login fails
+
+- SMS code expires quickly — request a fresh one if it fails.
+- Ensure the account owns/binds the gateway you're configuring.
+
+### Still stuck?
+
+Open an [issue](https://github.com/snailll2/leelen_home/issues) with the log excerpt of
+`custom_components/leelen_home` (or `Leelen` logger) from `home-assistant.log`.
 
 ---
 
 ## 📄 License
 
-MIT,与立林科技无关联,本项目非官方。
+MIT. Not an official project; not affiliated with Leelen.

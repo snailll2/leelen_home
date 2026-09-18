@@ -8,7 +8,7 @@
 - **Room → area auto-sync** — Leelen room structure is pushed into Home Assistant areas automatically at setup, and manually via `Options → Sync Rooms`. Existing manual area assignments are never overwritten.
 - **Gateway IP manual override** (`gateway_ip` option) — when the gateway changed IP via DHCP but the cloud `dump.db` still reports a stale address, override it in the options page.
 - **VSwitch (V设备) entity linking** — link a VSwitch to any home-assistant entity by `entity_id`; toggling the switch drives the linked entity's state (one master arm switch for the whole house).
-- **Bilingual project documentation** — Chinese `README.md` (primary) + English `README_EN.md`.
+- **Bilingual project documentation** — English `README.md` (default) + Chinese `README_CN.md`.
 
 ### 🛠 Fixes (WAN chain / connection layer)
 
