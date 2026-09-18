@@ -7,15 +7,17 @@ from typing import Any
 from homeassistant.components.cover import CoverEntity, CoverDeviceClass, CoverEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import LogUtils
+from .const import (CURTAIN_CLOSE, CURTAIN_OPEN, CURTAIN_POSITION, CURTAIN_STOP,
+                    COVER_LOGIC_TYPES)
+from .entity_base import LeelenEntity
 from .leelen.common.LeelenType import LogicDeviceType
+from .leelen.states.LinBaseState import LinBaseState
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinCurtainMotorState import LinCurtainMotorState
+from .leelen.utils.LogUtils import LogUtils
 from .platform_helper import async_setup_entry as _setup_platform
-from .state_subscription import StateUpdateSubscriber
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ def _build_entities(device_info, config_entry):
     """按 logic_type 建实体:TYPE_WIRELESS_CURTAIN→Cover。"""
     entities = []
     for logic_srv in device_info.get("logic_srv", []):
-        if logic_srv.get("logic_type") in [LogicDeviceType.TYPE_WIRELESS_CURTAIN]:
+        if logic_srv.get("logic_type") in COVER_LOGIC_TYPES:
             entities.append(Cover(
                 logic_srv.get("logic_addr"),
                 logic_srv.get("dev_addr"),
@@ -43,46 +45,29 @@ async def async_setup_entry(
     await _setup_platform(hass, config_entry, async_add_entities, _build_entities)
 
 
-class Cover(StateUpdateSubscriber, CoverEntity):
-    """Light entities for Leelen Home."""
+class Cover(LeelenEntity, CoverEntity):
+    """cover 平台的无线窗帘实体。"""
 
-    def __init__(self, logic_addr, device_id: str, name: str,dev_name:str, config_entry: ConfigEntry):
-        """Initialize the Light."""
-
-        self._device_id = device_id
-        self._name = name
-        self._device_name = dev_name
-        self._logic_addr = logic_addr
-        self._config_entry = config_entry
+    def __init__(self, logic_addr, device_id: str, name: str, dev_name: str, config_entry: ConfigEntry):
+        super().__init__(logic_addr, device_id, name, dev_name, config_entry)
         self._attr_current_cover_position = 0
 
         self._lin = LinCurtainMotorState()
         self._lin.service_address = logic_addr
         self._lin.service_type = LogicDeviceType.TYPE_WIRELESS_CURTAIN
-        self._lin.set_power_state(1)
+        self._lin.set_power_state(CURTAIN_OPEN)
         self._lin.set_progress(0)
-        self._attr_supported_features = CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP | CoverEntityFeature.SET_POSITION
+        self._attr_supported_features = (
+            CoverEntityFeature.OPEN
+            | CoverEntityFeature.CLOSE
+            | CoverEntityFeature.STOP
+            | CoverEntityFeature.SET_POSITION
+        )
         self._attr_is_closed = self._lin.progress == 0
-
-    @property
-    def unique_id(self) -> str:
-        return f"leelen_logic_addr_{self._logic_addr}"
-
-    @property
-    def name(self) -> str:
-        return self._name
 
     @property
     def device_class(self):
         return CoverDeviceClass.CURTAIN
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={("LEELEN_HOME", self._device_id)},
-            name=self._device_name,
-            manufacturer="LEELEN",
-        )
 
     @property
     def is_closed(self):
@@ -94,27 +79,27 @@ class Cover(StateUpdateSubscriber, CoverEntity):
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         _LOGGER.info("async_open_cover")
-        self._lin.set_power_state(1)
+        self._lin.set_power_state(CURTAIN_OPEN)
         ControlModel.get_instance().control(self._lin)
         self._attr_is_closed = False
         self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         _LOGGER.info("async_close_cover")
-        self._lin.set_power_state(0)
+        self._lin.set_power_state(CURTAIN_CLOSE)
         ControlModel.get_instance().control(self._lin)
         self._attr_is_closed = True
         self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         _LOGGER.info("async_stop_cover")
-        self._lin.set_power_state(2)
+        self._lin.set_power_state(CURTAIN_STOP)
         ControlModel.get_instance().control(self._lin)
         self.async_write_ha_state()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         position = kwargs.get("position", 0)
-        self._lin.set_power_state(3)
+        self._lin.set_power_state(CURTAIN_POSITION)
         self._lin.set_progress(position)
         LogUtils.d("async_set_cover_position", kwargs)
         ControlModel.get_instance().control(self._lin)

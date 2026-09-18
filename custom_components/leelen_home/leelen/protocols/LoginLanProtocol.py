@@ -1,7 +1,6 @@
 import json
 
 from ..common import LanProtocolCmd
-from ..entity.ack.LoginAck import LoginAck
 from ..protocols.BaseLanProtocol import BaseLanProtocol
 
 class LoginLanProtocol(BaseLanProtocol):

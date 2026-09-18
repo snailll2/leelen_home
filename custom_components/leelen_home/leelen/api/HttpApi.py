@@ -8,7 +8,6 @@ import uuid
 from typing import Any
 
 import aiofiles as aiofiles
-import aiohttp
 import aiosqlite
 from aiohttp import ClientError
 from homeassistant.core import HomeAssistant
@@ -21,6 +20,9 @@ from ..entity.BaseRequest import BaseRequest
 from ..utils.AesCoder import AesCoder
 from ..utils.LogUtils import LogUtils
 from ..utils.RSAEncrypt import RSAEncrypt
+
+#: 云端下发的设备库文件名,始终解析为 HA 配置目录下的绝对路径。
+DUMP_DB_FILENAME = "dump.db"
 
 
 class HttpApi(SingletonMixin):
@@ -52,7 +54,6 @@ class HttpApi(SingletonMixin):
         }
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/platform/getUser",
-                verify_ssl=False,
                 headers=headers,
                 json={
                 },
@@ -88,7 +89,6 @@ class HttpApi(SingletonMixin):
 
         async with session.post(
                 f"{self.RD_BASE_URL}/rest/api/third/app/user/login",
-                verify_ssl=False,
                 headers=headers,
                 data=data,
         ) as res:
@@ -106,7 +106,6 @@ class HttpApi(SingletonMixin):
         session = async_get_clientsession(self._hass)
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/security/getVerifyCode",
-                verify_ssl=False,
                 json=baseRequest.to_dict(),
         ) as res:
             res.raise_for_status()
@@ -135,7 +134,6 @@ class HttpApi(SingletonMixin):
 
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/user/verifyCodeLogin",
-                verify_ssl=False,
                 json=baseRequest.to_dict(),
         ) as res:
             res.raise_for_status()
@@ -174,7 +172,6 @@ class HttpApi(SingletonMixin):
         session = async_get_clientsession(self._hass)
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/safe/getUuid",
-                verify_ssl=False,
                 json={},
         ) as res:
             res.raise_for_status()
@@ -222,7 +219,6 @@ class HttpApi(SingletonMixin):
         session = async_get_clientsession(self._hass)
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/user/encryptV1Login",
-                verify_ssl=False,
                 json=baseRequest.to_dict(),
         ) as res:
             res.raise_for_status()
@@ -230,24 +226,26 @@ class HttpApi(SingletonMixin):
             # self.uuid = data.get("params", {}).get("uuid")
             return data
 
-    async def async_download_file(self, device_addr: str, save_path: str = "dump.db") -> bool:
+    async def async_download_file(self, device_addr: str, save_path: str) -> bool:
         url = f"{self.BASE_URL}/doc/{device_addr}/1/dump.db"
 
-        """异步下载文件并保存到本地"""
+        """异步下载文件并保存到本地(先写临时文件再原子替换,避免覆盖正被读取的库)"""
+        tmp_path = save_path + ".tmp"
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    # 检查HTTP状态码
-                    if response.status != 200:
-                        raise ClientError(
-                            f"下载失败，状态码: {response.status}，URL: {url}"
-                        )
+            session = async_get_clientsession(self._hass)
+            async with session.get(url) as response:
+                # 检查HTTP状态码
+                if response.status != 200:
+                    raise ClientError(
+                        f"下载失败，状态码: {response.status}，URL: {url}"
+                    )
 
-                    # 异步写入文件
-                    async with aiofiles.open(save_path, "wb") as file:
-                        async for chunk in response.content.iter_chunked(8192):
-                            await file.write(chunk)
-                    return True
+                # 异步写入文件
+                async with aiofiles.open(tmp_path, "wb") as file:
+                    async for chunk in response.content.iter_chunked(8192):
+                        await file.write(chunk)
+            os.replace(tmp_path, save_path)
+            return True
 
         except ClientError as e:
             if os.path.exists(save_path):
@@ -258,16 +256,20 @@ class HttpApi(SingletonMixin):
         except Exception as e:
             # 处理其他异常（如文件权限错误）
             raise Exception(f"下载异常: {str(e)}")
-        return False
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
 
     async def refresh_devices(self, device_addr):
-        db_path = "./dump.db"
+        # db 必须落在 HA 配置目录,不能依赖进程 CWD(容器/服务方式启动时两者不同)。
+        db_path = self._hass.config.path(DUMP_DB_FILENAME)
         if await self.async_download_file(device_addr, db_path):
             return await self.query_devices(db_path)
 
-    async def query_devices(self, db_path: str = "dump.db"):
+    async def query_devices(self, db_path: str | None = None):
         """使用with自动管理连接"""
+        db_path = db_path or self._hass.config.path(DUMP_DB_FILENAME)
         result = []
         async with aiosqlite.connect(db_path) as db:
             db.row_factory = aiosqlite.Row  # ✅ 设置 row_factory 才能用 dict(row)
@@ -279,14 +281,18 @@ class HttpApi(SingletonMixin):
                 device["all_property"] = []
                 dev_addr, dev_type, dev_name, sn = row
                 # cursor2 = await db.execute( f"select * from logic_srv_tbl where dev_addr = '{dev_addr}' and logic_type !=0  and srv_type !=0 and display=1 ;")
-                cursor2 = await db.execute( f"select * from logic_srv_tbl where dev_addr = '{dev_addr}' and logic_type !=0  and srv_type !=0 ;")
+                cursor2 = await db.execute(
+                    "select * from logic_srv_tbl where dev_addr = ? and logic_type != 0 and srv_type != 0;",
+                    (dev_addr,),
+                )
                 all_logic_srv = await cursor2.fetchall()
                 for row2 in all_logic_srv:
                     logic_srv = dict(row2)
                     device["logic_srv"].append(logic_srv)
 
                 cursor3 = await db.execute(
-                    f"select * from property_tbl where addr = '{dev_addr}' ;")
+                    "select * from property_tbl where addr = ?;", (dev_addr,)
+                )
                 all_property = await cursor3.fetchall()
                 for row2 in all_property:
                     property = dict(row2)
@@ -295,8 +301,9 @@ class HttpApi(SingletonMixin):
                 result.append(device)
         return result
 
-    async def query_gateway_ip(self, db_path: str = "dump.db"):
+    async def query_gateway_ip(self, db_path: str | None = None):
         """使用with自动管理连接"""
+        db_path = db_path or self._hass.config.path(DUMP_DB_FILENAME)
         async with aiosqlite.connect(db_path) as db:
             db.row_factory = aiosqlite.Row  # ✅ 设置 row_factory 才能用 dict(row)
             cursor = await db.execute(
@@ -309,8 +316,9 @@ class HttpApi(SingletonMixin):
                 device["logic_srv"] = []
                 return device.get("val")
 
-    async def query_rooms(self, db_path: str = "dump.db"):
+    async def query_rooms(self, db_path: str | None = None):
         """查询房间表(含 room_id == 0 的「客厅」,与其他房间同等对待)。"""
+        db_path = db_path or self._hass.config.path(DUMP_DB_FILENAME)
         async with aiosqlite.connect(db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(

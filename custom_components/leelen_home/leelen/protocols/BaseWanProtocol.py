@@ -71,7 +71,7 @@ class BaseWanProtocol:
             protocol.request_data_head = data[:protocol.head_length]
             header = memoryview(protocol.request_data_head)
 
-            sync_header = header[0:3]
+            # 头部布局:0..2 sync_header / 3..4 ver / 5..6 cmd / 7..10 session_id / 11 action ...
             protocol.protocol_ver = bytes(header[3:5])
             protocol.cmd = bytes(header[5:7])
             protocol.session_id = bytes(header[7:11])

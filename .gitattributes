@@ -1,0 +1,16 @@
+# 统一文本文件行尾为 LF。
+# 仓库基线(HEAD)全部为 LF;Windows 编辑器曾把 README/config_flow/switch/translations
+# 整文件改成 CRLF,导致 diff 变成「整文件重写」无法评审。此规则让 git 在入库时
+# 归一化为 LF,避免复发。
+* text=auto eol=lf
+
+# 二进制资源不做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.pyc binary
+*.db binary

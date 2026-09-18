@@ -1,5 +1,5 @@
 import struct
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from .LogUtils import LogUtils
 

@@ -100,7 +100,7 @@ class BaseConnect:
 
             if not self.server_host:
                 if self.show_log:
-                    LogUtils.w(self.tag,f"Server host is empty")
+                    LogUtils.w(self.tag,"Server host is empty")
                     return
                 # self.conn_handler.send_empty_message(self.MSG_TYPE_SERVER_HOST_EMPTY)
             else:
@@ -139,7 +139,7 @@ class BaseConnect:
 
                     if not self.m_socket:
                         if self.show_log:
-                            LogUtils.d(self.tag,f"Socket creation failed")
+                            LogUtils.d(self.tag,"Socket creation failed")
                         self.set_connect_state(ConnectState.NONE)
                         self.reset()
                         return
@@ -150,7 +150,7 @@ class BaseConnect:
                             self.set_connect_state(ConnectState.CONNECTED)
 
                             # if not self.m_recv_data_running:
-                            # LogUtils.d(self.tag,f"start r_recv_data thread")
+                            # LogUtils.d(self.tag,"start r_recv_data thread")
 
                             # self.thread_pool.submit(self.r_recv_data)
                             # DefaultThreadPool.get_instance().execute(self.r_recv_data)
@@ -160,7 +160,7 @@ class BaseConnect:
                                 self.recv_data_executor = threading.Thread(target=self.r_recv_data)
                                 self.recv_data_executor.finished = threading.Event()
                                 self.recv_data_executor.start()
-                                LogUtils.d(self.tag,f"r_recv_data thread started")
+                                LogUtils.d(self.tag,"r_recv_data thread started")
                             
                             self.heartbeat_once()
                             
@@ -183,7 +183,7 @@ class BaseConnect:
                     self.set_connect_state(ConnectState.NONE)
                     self.reset()
                 finally:
-                    LogUtils.i(f"connect thread finished! ")
+                    LogUtils.i("connect thread finished! ")
                     run.running = False
 
         def is_running() -> bool:
@@ -349,7 +349,7 @@ class BaseConnect:
                 self.send_logon_data()
             else:
                 if self.show_log:
-                    LogUtils.d(self.tag,f"Already logging in or logged in")
+                    LogUtils.d(self.tag,"Already logging in or logged in")
         else:
             self.connect()
 
@@ -364,10 +364,10 @@ class BaseConnect:
     def open(self):
         if self.scheduled_executor and not self.scheduled_executor.finished.is_set():
             self.heartbeat_once()
-            LogUtils.d(self.tag,f"Heartbeat once")
+            LogUtils.d(self.tag,"Heartbeat once")
         else:
             self.start_heartbeat()
-            LogUtils.d(self.tag,f"Started heartbeat")
+            LogUtils.d(self.tag,"Started heartbeat")
 
     def recv_heartbeat(self):
         self.pre_heartbeat_recv = True
@@ -495,7 +495,7 @@ class BaseConnect:
                 if time.time() - self.pre_heartbeat_recv_time > 30:
                 # if time.time() - self.pre_heartbeat_start_time  > 150:
                     self.pre_heartbeat_start_time= time.time()
-                    LogUtils.e(self.tag,f" 💥 heartbeat not recv for 30s,reset ")
+                    LogUtils.e(self.tag," 💥 heartbeat not recv for 30s,reset ")
                     self.reset()
                     # self.open()
                 else:
@@ -528,7 +528,7 @@ class BaseConnect:
         
         # 检查是否已经有心跳线程在运行
         if self.scheduled_executor and not self.scheduled_executor.finished.is_set():
-            LogUtils.d(self.tag,f" Heartbeat thread already running, skipping start ")
+            LogUtils.d(self.tag," Heartbeat thread already running, skipping start ")
             return
         
         # 停止现有的心跳线程
@@ -536,7 +536,7 @@ class BaseConnect:
         
         # 确保scheduled_executor为None
         if self.scheduled_executor:
-            LogUtils.d(self.tag,f" Waiting for existing heartbeat thread to stop ")
+            LogUtils.d(self.tag," Waiting for existing heartbeat thread to stop ")
             try:
                 self.scheduled_executor.join(timeout=1.0)
             except Exception as e:
@@ -563,9 +563,9 @@ class BaseConnect:
             executor.finished = finished
             self.scheduled_executor = executor
             executor.start()
-            LogUtils.d(self.tag,f" 💥 heartbeat_task started ")
+            LogUtils.d(self.tag," 💥 heartbeat_task started ")
         else:
-            LogUtils.d(self.tag,f" Heartbeat thread already exists, skipping start ")
+            LogUtils.d(self.tag," Heartbeat thread already exists, skipping start ")
             # self.thread_pool.submit(heartbeat_task)
             # DefaultThreadPool.get_instance().execute(heartbeat_task)
 
@@ -575,11 +575,11 @@ class BaseConnect:
             # 等待线程真正停止，最多等待2秒
             try:
                 self.scheduled_executor.join(timeout=2.0)
-                LogUtils.d(self.tag,f" 💥 scheduled_executor joined ")
+                LogUtils.d(self.tag," 💥 scheduled_executor joined ")
             except Exception as e:
                 LogUtils.d(self.tag,f" Join scheduled_executor error: {e}")
             self.scheduled_executor = None
-            LogUtils.d(self.tag,f" 💥 scheduled_executor stoped ")
+            LogUtils.d(self.tag," 💥 scheduled_executor stoped ")
 
     def stop_connect_executor(self):
         if self.connect_executor and not self.connect_executor.finished.is_set():
@@ -587,11 +587,11 @@ class BaseConnect:
             # 等待线程真正停止，最多等待2秒
             try:
                 self.connect_executor.join(timeout=2.0)
-                LogUtils.d(self.tag,f" 💥 connect_executor joined ")
+                LogUtils.d(self.tag," 💥 connect_executor joined ")
             except Exception as e:
                 LogUtils.d(self.tag,f" Join connect_executor error: {e}")
             self.connect_executor = None
-            LogUtils.d(self.tag,f" 💥 stop_connect_executor stoped ")
+            LogUtils.d(self.tag," 💥 stop_connect_executor stoped ")
 
     def stop_recv_data_executor(self):
         if self.recv_data_executor and not self.recv_data_executor.finished.is_set():
@@ -606,20 +606,20 @@ class BaseConnect:
             if self.m_socket:
                 try:
                     self.m_socket.close()
-                    LogUtils.d(self.tag,f" Socket closed to wake up recv() ")
+                    LogUtils.d(self.tag," Socket closed to wake up recv() ")
                 except Exception as e:
                     LogUtils.d(self.tag,f" Error closing socket: {e}")
             
             # 4. 等待线程真正停止，最多等待2秒
             try:
                 self.recv_data_executor.join(timeout=2.0)
-                LogUtils.d(self.tag,f" 💥 recv_data_executor joined ")
+                LogUtils.d(self.tag," 💥 recv_data_executor joined ")
             except Exception as e:
                 LogUtils.d(self.tag,f" Join recv_data_executor error: {e}")
             
             # 5. 清理
             self.recv_data_executor = None
-            LogUtils.d(self.tag,f" 💥 stop_recv_data_executor stoped ")
+            LogUtils.d(self.tag," 💥 stop_recv_data_executor stoped ")
     
     
 

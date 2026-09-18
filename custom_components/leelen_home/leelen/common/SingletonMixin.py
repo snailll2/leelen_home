@@ -24,7 +24,19 @@ from typing import Any, Optional
 
 class SingletonMixin:
     _instance: Optional[Any] = None
-    _singleton_lock = threading.Lock()
+    #: 兜底锁(基类本身不作为单例使用)。子类在类创建时各自获得独立锁,见 __init_subclass__。
+    _singleton_lock: threading.Lock = threading.Lock()
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        """给每个子类分配独立的锁。
+
+        锁若留在基类上,会被全部子类共享;而 ``get_instance`` 的非重入锁一旦在
+        「某个单例的构造过程中又去取另一个单例」时被二次加锁,就会永久自死锁 ——
+        典型如 LanDataResponseHandleModel.__init__ → LanDataRequestModel.get_instance()。
+        死锁后这把共享锁不会释放,后续任何单例的 get_instance 都会一起卡死。
+        """
+        super().__init_subclass__(**kwargs)
+        cls._singleton_lock = threading.Lock()
 
     @classmethod
     def get_instance(cls, *args, **kwargs):

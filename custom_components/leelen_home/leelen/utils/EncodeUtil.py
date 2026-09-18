@@ -1,8 +1,7 @@
 import hashlib
-import hmac
 import string
 import random
-from typing import Optional, Union
+from typing import Union
 
 from .LogUtils import LogUtils
 

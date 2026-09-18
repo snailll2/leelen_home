@@ -1,5 +1,4 @@
 from ..Config import Config
-from ..GatewayInfo import GatewayInfo
 from ...common.SingletonMixin import SingletonMixin
 from ...utils.LogUtils import LogUtils
 
@@ -13,7 +12,8 @@ class ConfigDao(SingletonMixin):
         # ).execute()
 
     def get_config_by_gateway(self):
-        gateway = GatewayInfo.get_instance().gateway_desc_string
+        # 原 ORM 版按网关地址查询( gateway = GatewayInfo.get_instance().gateway_desc_string ),
+        # 当前为内存实现,不区分网关 —— 多网关场景下会互相覆盖,待补。
         # config = Config.select().where(Config.gateway_address == gateway).first()
         # if config is None:
         #     LogUtils.i("ConfigDao", "getConfigByGateway config == null")
@@ -22,7 +22,6 @@ class ConfigDao(SingletonMixin):
         return self.config
 
     def save_or_update_config_by_gateway(self, config: Config):
-        gateway = GatewayInfo.get_instance().gateway_desc_string
         self.config.latest_time = config.latest_time
         # existing = Config.select().where(Config.gateway_address == gateway).first()
         # if existing:

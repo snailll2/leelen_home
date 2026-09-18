@@ -23,7 +23,10 @@ class LinCenterAcState(LinBaseState):
     def get_room_temperature(self) -> float:
         return self.room_temperature
 
-    def is_break_down(self) -> bool:
+    def get_break_down(self) -> bool:
+        """原方法名 is_break_down 与 dataclass 字段同名,实例上永远取不到该方法
+        (属性查找先命中实例字典),且方法体自身也会返回字段而非布尔结果。
+        改名以与 get_mode/get_speed 等保持一致。"""
         return self.is_break_down
 
     def set_mode(self, mode: int):

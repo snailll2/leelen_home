@@ -52,7 +52,6 @@ class WanDataHandleModel(SingletonMixin):
         if protocol.response_code == 1:
             data = protocol.request_data_body
             server_code = data[0:2]
-            server_id = data[2:18]
 
             GatewayInfo.get_instance().wan_server_code = server_code
             server_value = ConvertUtils.to_unsigned_short(server_code)

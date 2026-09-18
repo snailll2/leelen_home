@@ -39,7 +39,7 @@ class LeelenService:
         User.get_instance().username = self._config.get(CONF_USERNAME)
         User.get_instance().password = self._config.get(CONF_PASSWORD)
         GatewayInfo.get_instance().set_gateway_desc(self._config.get(CONF_DEVICE_ADDR))
-        GatewayInfo.get_instance().lan_address_ip = self._hass.data[DOMAIN].get(CONF_GATEWAY_IP)
+        GatewayInfo.get_instance().lan_address_ip = self._hass.data[DOMAIN][self._entry.entry_id].get(CONF_GATEWAY_IP)
 
         """Start the servcie, called when component starts."""
         LogUtils.i(f"{LeelenService.__name__} start async_start")
@@ -129,7 +129,7 @@ class LeelenService:
         """按真实状态写/更新 persistent_notification(同一条,id 一致会覆盖)。"""
         addr = self._config.get(CONF_DEVICE_ADDR)
         # unload 后 DOMAIN 可能已被 pop,读不到时按空值降级,避免 KeyError 炸掉监控任务。
-        ip = self._hass.data.get(DOMAIN, {}).get(CONF_GATEWAY_IP)
+        ip = self._hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {}).get(CONF_GATEWAY_IP)
         channel = "互联网" if only_wan else "本地"
         if status == "connected":
             message = f"网关{addr} ({ip}) {channel}连接状态: 已连接"

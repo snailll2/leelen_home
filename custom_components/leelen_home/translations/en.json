@@ -8,7 +8,8 @@
       "invalid_phone": "Please enter a valid 11-digit phone number",
       "sms_rate_limit": "SMS rate limit exceeded, please try again later",
       "invalid_code": "Invalid verification code",
-      "login_failed": "Login failed"
+      "login_failed": "Login failed",
+      "send_code_failed": "Failed to send verification code, please try again later"
     },
     "step": {
       "user": {
@@ -28,6 +29,11 @@
     }
   },
   "options": {
+    "error": {
+      "refresh_failed": "Device sync failed, check the logs for details",
+      "no_vswitch_found": "No V switch devices found",
+      "no_entity_found": "No linkable entities found"
+    },
     "step": {
       "init": {
         "title": "Device Management",
@@ -87,7 +93,7 @@
       },
       "refresh_result": {
         "title": "Sync Completed",
-        "description": "Total devices found: {total}\nAdded devices: {added}\nRemoved devices: {removed}\nRemoved entities: {removed_entities}"
+        "description": "Total devices found: {total}\nAdded devices: {added}\nNo controllable channel: {no_channel}\nRemoved devices: {removed}\nRemoved entities: {removed_entities}"
       },
       "sync_rooms": {
         "title": "Sync Rooms",
@@ -104,6 +110,10 @@
       "connect_mode": {
         "title": "Connection Mode",
         "description": "Choose whether device control uses LAN (local network) or WAN (internet).\nTakes effect immediately on save.\nWAN mode does not establish a local connection."
+      },
+      "gateway_ip": {
+        "title": "Gateway IP",
+        "description": "Auto-detected from cloud dump.db: {auto_ip}\n\nWhen set, this address is used and dump.db is not read; leave blank to use the auto-detected value.\nAfter the gateway changes IP via DHCP the cloud may still hold the old address; enter the current one here."
       },
       "cancel": {
         "title": "Canceled"

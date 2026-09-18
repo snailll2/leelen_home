@@ -52,32 +52,37 @@ class PassThroughWanProtocol(BaseWanProtocol):
         return bytes(result)
 
     def get_pass_data(self, data: bytes) -> Optional[bytes]:
+        """取出 PassThrough 帧的 body。
+
+        帧布局(共 42 字节起,末尾 1 字节 CRC):
+            0..27   头部(28B)
+            28..-2  body
+            -1      CRC8
+        """
         if not data:
             return None
         if len(data) < 42:
             LogUtils.e(self.TAG, f"getPassData() data length = {len(data)}, < 42")
             return None
 
-        data_len = len(data)
-        header = data[:28]
-        body = data[28:-1]
-        crc = data[-1:]
-        return body
+        return data[28:-1]
 
     def is_login_lan(self, data: bytes) -> bool:
+        """判断该 WAN 帧是否属于 LAN 登录(非 LAN 登录帧返回 False)。
+
+        帧布局(偏移,长度):
+            0..1  sync_header   2..3  length   4..5  ver
+            6..7  seq           8..11 cmd      12     action
+            13..  remain(其余全部)
+        当前只有 seq/action/remain 参与判定,其余字段保留在布局表里供对照。
+        """
         if not data:
             return False
         if len(data) < 14:
             return True
 
-        data_len = len(data)
         buffer = memoryview(data)
-
-        sync_header = buffer[0:2]
-        length = buffer[2:4]
-        ver = buffer[4:6]
         seq = buffer[6:8]
-        cmd = buffer[8:12]
         action = buffer[12:13]
         remain = buffer[13:]
 
@@ -146,22 +151,18 @@ class PassThroughWanProtocol(BaseWanProtocol):
 
         try:
             buffer = memoryview(data)
-            header = buffer[0:3]
-            ver = buffer[3:5]
-            cmd = buffer[5:7]
-            seq = buffer[7:9]
-            length = buffer[9:11]
+            # 帧布局(偏移,长度):
+            #   0..2 header  3..4 ver   5..6 cmd   7..8 seq   9..10 length
+            #   11   encrypt 12   action 13..16 server_id 17..24 src 25..32 dest
+            #   33   crc(仅 encrypt != 0 时存在)
+            # 当前只用 encrypt(决定是否有 CRC 字节)/ seq / src / dest,其余字段保留在此
+            # 布局表里备查,不再逐个取出为局部变量。
             encrypt = buffer[11:12]
-            action = buffer[12:13]
-            server_id = buffer[13:17]
+            seq = buffer[7:9]
             src = buffer[17:25]
             dest = buffer[25:33]
 
-            if encrypt[0] != 0:
-                crc = buffer[33:34]
-                pos = 34
-            else:
-                pos = 33
+            pos = 34 if encrypt[0] != 0 else 33
 
             remain_len = len(data) - 36
             if remain_len <= 0:

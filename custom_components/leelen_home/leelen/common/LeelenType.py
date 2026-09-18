@@ -763,6 +763,10 @@ class LogicDeviceType:
     WIRELESS_GATEWAY = 770
     WIRELESS_INPUT_SWITCH = 517
     WIRELESS_OUT_PUT_CURTAIN = 571
+    # dump.db 实测:572 作为 logic_type 挂在 dev_type=1457(ZigBee 双路窗帘控制面板)下,
+    # srv_type=0 会被 query_devices 的 srv_type != 0 过滤,不会建出实体。
+    # 旧 switch.py 曾以裸数字 572 把它当插座位匹配,此处仅命名化、不改判定。
+    WIRELESS_DOUBLE_CURTAIN_PANEL = 572
     WIRELESS_OUT_PUT_SWITCH = 515
     ZIGBEE_AC_GATEWAY_AC = 782
     ZIGBEE_AC_GATEWAY_REFRESH_AIR = 783

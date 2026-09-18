@@ -86,8 +86,8 @@ class ConnectWan(SingletonMixin, BaseConnect):
 
         elif protocol.cmd == WanProtocolCmd.PUSH_MSG:
             LogUtils.i(self.tag, "push message")
-            src = ConvertUtils.get_long_address_by_type(DeviceType.APP, User.get_instance().account_id)
-            dest = ConvertUtils.get_long_address_by_type(DeviceType.SERVER, 0)
+            # 原实现此处要构造 push 帧(src/dest 由 APP/SERVER 长地址换算),
+            # 该分支尚未移植,故不再预先计算这两个地址。
             #
             # push_protocol = PushMsgWanProtocol.get_instance()
             # push_protocol.set_session_id(protocol.session_id)

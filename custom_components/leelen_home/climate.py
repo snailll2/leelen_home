@@ -2,55 +2,32 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Any
+from typing import Any
 
-from homeassistant.components.climate import ClimateEntity, HVACMode, ClimateEntityFeature, DEFAULT_MAX_HUMIDITY, \
-    DEFAULT_MAX_TEMP, DEFAULT_MIN_HUMIDITY, DEFAULT_MIN_TEMP, HVACAction, FAN_LOW, FAN_MEDIUM, FAN_HIGH, FAN_ON, \
-    FAN_OFF
+from homeassistant.components.climate import ClimateEntity, HVACMode, ClimateEntityFeature, \
+    DEFAULT_MAX_HUMIDITY, DEFAULT_MAX_TEMP, DEFAULT_MIN_HUMIDITY, DEFAULT_MIN_TEMP, HVACAction, \
+    FAN_LOW, FAN_MEDIUM, FAN_HIGH, FAN_ON, FAN_OFF
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from . import LogUtils
-from .const import HVAC_MODE_MAP, FAN_MODE_SPEED_MAP, SPEED_FAN_MODE_MAP, MODE_HVAC_MAP
+from .const import (HVAC_MODE_MAP, FAN_MODE_SPEED_MAP, SPEED_FAN_MODE_MAP, MODE_HVAC_MAP,
+                    POWER_OFF, POWER_ON, POWER_ON_WITH_SETTINGS, CLIMATE_LOGIC_TYPES)
+from .entity_base import LeelenEntity
 from .leelen.common.LeelenType import FunctionType, LogicDeviceType
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinCenterAcState import LinCenterAcState
 from .leelen.states.LinSensorState import LinSensorState
+from .leelen.utils.LogUtils import LogUtils
 from .platform_helper import async_setup_entry as _setup_platform
-from .state_subscription import StateUpdateSubscriber
-
 
 _LOGGER = logging.getLogger(__name__)
 
+#: 中心空调/地暖/新风的 logic_type,定义见 const.CLIMATE_LOGIC_TYPES。
+SUPPORTED_LOGIC_TYPES = CLIMATE_LOGIC_TYPES
 
-SUPPORTED_LOGIC_TYPES = [
-    # 中心空调 146
-    LogicDeviceType.TYPE_CENTER_AIR_CONDITIONER,
-    # 中心空调 658
-    LogicDeviceType.ZIGBEE_CENTER_AC,
-    # 中心空调控制 770
-    LogicDeviceType.TYPE_AC_CONTROL,
-
-
-    # 地板加热器 772
-    LogicDeviceType.TYPE_FLOOR_CONTROL,
-    # 地板加热器 775
-    LogicDeviceType.TYPE_FLOOR_ACTUATOR,
-    # 地板加热器 776
-    LogicDeviceType.TYPE_FLOOR,
-
-    # 新风 774
-    LogicDeviceType.TYPE_FRESH_ACTUATOR,
-    # 新风 771
-    LogicDeviceType.TYPE_FRESH_CONTROL,
-    # 新风 777
-    LogicDeviceType.TYPE_AC_FRESH,
-
-]
 
 def _build_entities(device_info, config_entry):
     """按 SUPPORTED_LOGIC_TYPES 建实体:中心空调/地暖/新风统一为 Climate。"""
@@ -75,24 +52,16 @@ async def async_setup_entry(
     await _setup_platform(hass, config_entry, async_add_entities, _build_entities)
 
 
-class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
+class Climate(LeelenEntity, ClimateEntity, RestoreEntity):
     """Climate entities for Leelen Home."""
 
     def __init__(self, logic_addr, device_id: str, logic_name: str, dev_name: str, config_entry: ConfigEntry):
-        """Initialize the Light."""
+        super().__init__(logic_addr, device_id, logic_name, dev_name, config_entry)
 
-        self._device_id = device_id
-        self._name = logic_name
-        self._device_name = dev_name
-        self._logic_addr = logic_addr
-        self._prop_on = False  # 初始状态
-        self._config_entry = config_entry
         self._attr_device_class = 'climate'
 
         self._attr_target_temperature = 25.0
         self._attr_current_temperature = 25.0
-        self._attr_target_temperature_high: float | None = None
-        self._attr_target_temperature_low: float | None = None
         self._attr_temperature_unit: str = ""
         self._attr_min_temp: float = DEFAULT_MIN_TEMP
         self._attr_max_temp: float = DEFAULT_MAX_TEMP
@@ -107,7 +76,6 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
         self._attr_fan_modes: list[str] = [FAN_LOW, FAN_MEDIUM, FAN_HIGH, FAN_ON, FAN_OFF]
 
         self._attr_target_humidity: int = 0
-        self._attr_current_humidity: int = None
         self._attr_max_humidity: int = DEFAULT_MAX_HUMIDITY
         self._attr_min_humidity: int = DEFAULT_MIN_HUMIDITY
 
@@ -122,7 +90,6 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
         self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
         # self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
         self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
-        self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
         # self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
         self._attr_supported_features |= ClimateEntityFeature.TURN_ON
         self._attr_supported_features |= ClimateEntityFeature.TURN_OFF
@@ -133,43 +100,32 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
         self._lin.set_mode(2)
         self._lin.set_speed(1)
         self._lin.set_setting_temperature(self._attr_target_temperature)
-        self._lin.set_power_state(3)
-    
-    
+        self._lin.set_power_state(POWER_ON_WITH_SETTINGS)
+
     async def async_added_to_hass(self):
         """在 HA 加载这个实体时调用，尝试恢复状态"""
         await super().async_added_to_hass()
         old_state = await self.async_get_last_state()
-        
+
         if old_state:
-            
+
             if "temperature" in old_state.attributes:
                 self._attr_target_temperature = float(old_state.attributes["temperature"])
                 self._lin.set_setting_temperature(self._attr_target_temperature)
-                
+
             if "hvac_mode" in old_state.attributes:
                 self._attr_hvac_mode = old_state.attributes["hvac_mode"]
-                
+
                 mode = HVAC_MODE_MAP.get(self._attr_hvac_mode)
                 if mode is not None:
                     self._lin.set_mode(mode)
-            
+
             if "fan_mode" in old_state.attributes:
                 fan_mode = old_state.attributes["fan_mode"]
                 self._attr_fan_mode = fan_mode
 
                 speed = FAN_MODE_SPEED_MAP.get(fan_mode.lower(), 0)
                 self._lin.set_speed(speed)
-         
-    
-
-    @property
-    def unique_id(self) -> str:
-        return f"leelen_logic_addr_{self._logic_addr}"
-
-    @property
-    def name(self) -> str:
-        return self._name
 
     @property
     def temperature_unit(self):
@@ -184,19 +140,6 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
         return UnitOfTemperature.CELSIUS
 
     @property
-    def is_on(self) -> Optional[bool]:
-        """Return if the climate is on."""
-        return self._prop_on
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={("LEELEN_HOME", self._device_id)},
-            name=self._device_name,
-            manufacturer="LEELEN",
-        )
-
-    @property
     def hvac_mode(self):
         if not self._prop_on:
             return HVACMode.OFF
@@ -209,6 +152,7 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
     @property
     def hvac_action(self):
         """Return the current running hvac operation if supported.
+
         Need to be one of HVACAction.*.
         """
         if not self._prop_on:
@@ -240,14 +184,13 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
             self.async_write_ha_state()
             return
 
-        # 先更新内部状态,再发起控制,再写 HA 状态(修正原来 write 在赋值之前的顺序颠倒)
-        await self.async_turn_on()
-        self._lin.set_power_state(3)
-
+        # 单帧同时携带「开机 + 模式 + 目标温度」:不再先 async_turn_on 多发一帧电源
+        # (旧实现一次模式切换会连发两帧,失败时设备可能停在中间态)。
+        self._prop_on = True
+        self._lin.set_power_state(POWER_ON_WITH_SETTINGS)
         mode = HVAC_MODE_MAP.get(hvac_mode)
         if mode is not None:
             self._lin.set_mode(mode)
-
         self._attr_hvac_mode = hvac_mode
         ControlModel.get_instance().control(self._lin, 0)
         self.async_write_ha_state()
@@ -271,7 +214,7 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
     @property
     def target_temperature(self):
         return self._attr_target_temperature
-    
+
     @property
     def current_temperature(self):
         return self._attr_current_temperature
@@ -280,16 +223,8 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
     def target_temperature_step(self):
         return 1
 
-    @property
-    def target_temperature_high(self):
-        return self._attr_target_temperature_high if self._attr_target_temperature_high is not None else self.max_temp
-
-    @property
-    def target_temperature_low(self):
-        return self._attr_target_temperature_low if self._attr_target_temperature_low is not None else self.min_temp
-
     async def async_set_fan_mode(self, fan_mode: str) -> None:
-        self._lin.set_power_state(3)
+        self._lin.set_power_state(POWER_ON_WITH_SETTINGS)
         speed = FAN_MODE_SPEED_MAP.get(fan_mode.lower(), 0)
         self._lin.set_speed(speed)
         self._attr_fan_mode = fan_mode
@@ -325,22 +260,25 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
         pass
 
     async def async_set_temperature(self, **kwargs):
-        # 实现温度设置逻辑
-        self._attr_target_temperature = kwargs.get("temperature")
-        self._lin.power_state = 3
-        self._lin.setting_temperature = self._attr_target_temperature
+        temperature = kwargs.get("temperature")
+        if temperature is None:
+            return
+        self._attr_target_temperature = temperature
+        self._lin.set_power_state(POWER_ON_WITH_SETTINGS)
+        self._lin.set_setting_temperature(temperature)
         ControlModel.get_instance().control(self._lin)
         self.async_write_ha_state()
 
     def turn_on(self, **kwargs):
-        self._lin.power_state = 1
-        ControlModel.get_instance().control(self._lin)
+        # 先组装好 power/温度再 control:control 在调用时即取值打包,顺序颠倒会丢字段
+        self._lin.set_power_state(POWER_ON)
         self._lin.set_setting_temperature(self._attr_target_temperature)
+        ControlModel.get_instance().control(self._lin)
         self._prop_on = True
         return True
 
     def turn_off(self, **kwargs):
-        self._lin.power_state = 0
+        self._lin.set_power_state(POWER_OFF)
         ControlModel.get_instance().control(self._lin)
         self._prop_on = False
         return True
@@ -362,12 +300,12 @@ class Climate(StateUpdateSubscriber, ClimateEntity, RestoreEntity):
             return
 
         # 电源状态是状态报告的基础,按原语义无条件更新(power_state == 1 表示开)
-        self._prop_on = state.power_state == 1
+        self._prop_on = state.power_state == POWER_ON
         # mode/speed/setting_temperature 的默认值是 0,若上报帧未携带则该字段为 0,
         # 不应回写覆盖已确认的模式/风速/目标温度(否则连续上报会互相覆盖成不完整状态)
         if state.mode:
             self._attr_hvac_mode = MODE_HVAC_MAP.get(state.mode, HVACMode.FAN_ONLY)
         if state.speed:
-            self._attr_fan_mode = SPEED_FAN_MODE_MAP.get(state.speed, "low")
+            self._attr_fan_mode = SPEED_FAN_MODE_MAP.get(state.speed, FAN_LOW)
         if state.setting_temperature:
             self._attr_target_temperature = state.setting_temperature

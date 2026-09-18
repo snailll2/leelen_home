@@ -2,6 +2,7 @@ import logging
 from ..common import DeviceType
 from ..common.SingletonMixin import SingletonMixin
 from ..entity.GatewayInfo import GatewayInfo
+from ..states.LinBaseState import LinBaseState
 from ..entity.User import User
 from ..protocols.DeviceControlLanProtocol import DeviceControlLanProtocol
 from ..utils.ConvertUtils import ConvertUtils
@@ -37,7 +38,7 @@ class ControlModel(SingletonMixin):
         HeartbeatService.get_instance().request(request_data)
         return ConvertUtils.to_int(protocol.frame_id)
 
-    def control(self, lin_base_state: 'LinBaseState', i: int = 0):
+    def control(self, lin_base_state: LinBaseState, i: int = 0):
         from ..common.CommonModel import CommonModel
 
         service_address = lin_base_state.get_service_address()
@@ -48,8 +49,8 @@ class ControlModel(SingletonMixin):
         LogUtils.i((service_address, service_type, function_id, control_value))
 
         if control_value is not None:
-            control_result = ControlModel.get_instance().device_control(service_address, function_id, control_value)
-            # EventModel.get_instance().set_control_listener(control_result, lin_operation_listener)
+            # 返回值(帧 id)当前无人消费,直接丢弃;调用本身有副作用(下发控制帧)
+            ControlModel.get_instance().device_control(service_address, function_id, control_value)
         # else:
         #     result = LinOperationResult()
         #     result.set_code(2)

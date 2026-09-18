@@ -3,7 +3,6 @@
   "content_in_root": false,
   "filename": "leelen_home",
   "country": ["CN"],
-  "homeassistant": "2024.1.0",
-  "render_readme": true,
-  "iot_class": "Cloud Polling"
+  "homeassistant": "2024.11.0",
+  "render_readme": true
 }

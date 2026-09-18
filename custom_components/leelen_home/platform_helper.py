@@ -23,6 +23,24 @@ from .const import DOMAIN
 SIGNAL_DEVICE_REFRESH = "leelen_integration_device_refresh"
 
 
+def _added_unique_ids(hass: HomeAssistant, config_entry: ConfigEntry) -> set[str]:
+    """本次 HA 运行期内、本配置项已经添加过的实体 unique_id 集合。
+
+    用途:device_refresh 会重跑 ``setup_devices_from_db`` 并为**全部**设备重建实体,
+    已添加过的那些会撞 unique_id —— HA 只打一条 ERROR「does not generate unique IDs」
+    然后丢弃(每次同步每台设备一行噪音日志)。据此跳过它们。
+
+    注意**不能用实体注册表**判断:注册表跨重启持久化,启动时里面已经有上次运行留下的
+    全部实体,拿它过滤会导致重启后一个实体都不创建 —— 界面上所有实体变成 unavailable
+    (HA 会把注册表里有、平台却没提供的实体恢复成不可用态)。
+    因此这里只在内存里记录「本次运行已添加过谁」,卸载时随 entry 数据一起丢弃。
+    """
+    entry_data = hass.data.setdefault(DOMAIN, {}).setdefault(config_entry.entry_id, {})
+    if not isinstance(entry_data, dict):  # 防御:DOMAIN 下该键被占作他用
+        return set()
+    return entry_data.setdefault("entity_unique_ids", set())
+
+
 async def setup_devices_from_db(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -36,6 +54,8 @@ async def setup_devices_from_db(
     返回本次创建的实体列表,供 async_setup_entry 做添加后的收尾。
     """
     device_list = hass.data[DOMAIN]["devices"].get(config_entry.entry_id) or []
+    # 跳过本次运行已经添加过的实体(见 _added_unique_ids 的说明),新设备照常建出。
+    added_ids = _added_unique_ids(hass, config_entry)
     entities = []
     for device_info in device_list:
         created = build_entities(device_info, config_entry)
@@ -46,7 +66,12 @@ async def setup_devices_from_db(
         for entity in created:
             if entity is None:
                 continue
+            if entity.unique_id in added_ids:
+                continue
             entities.append(entity)
+
+    # 记录本批实际要添加的 unique_id,后续 refresh 才能跳过它们。
+    added_ids.update(entity.unique_id for entity in entities)
 
     # HA 原生状态更新订阅(取代旧 FlowRxBus 事件总线)。
     # 平台若不用订阅(text 等重属性实体),实体自带该属性即可透传。

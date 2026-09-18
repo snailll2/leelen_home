@@ -1,5 +1,5 @@
 import binascii
-import logging
+import os
 import ssl
 import tempfile
 import traceback
@@ -151,6 +151,10 @@ class SslUtils:
 
     @staticmethod
     def get_lan_socket_ssl_context(p12_hex: str, p12_password: str, bks_hex: str, bks_password: str) -> ssl.SSLContext:
+        # 临时文件路径,统一在 finally 里删除:私钥/证书只是喂给 OpenSSL 的中间物,
+        # load_cert_chain / load_verify_locations 已把内容读进 context,之后即可删除。
+        # 原实现用 delete=False 且从不清理,私钥 PEM 会长期留在 /tmp 且每次重连再留一份。
+        temp_paths: list[str] = []
         try:
             # 1. 解析 P12 数据
             p12_data = binascii.unhexlify(p12_hex)
@@ -165,6 +169,8 @@ class SslUtils:
             with tempfile.NamedTemporaryFile(mode="w", delete=False) as key_file, tempfile.NamedTemporaryFile(mode="w",
                                                                                                               delete=False) as cert_file, tempfile.NamedTemporaryFile(
                 mode="w", delete=False) as ca_cert_temp:
+                temp_paths = [key_file.name, cert_file.name, ca_cert_temp.name]
+
                 key_file.write(key_pem.decode("utf-8"))
                 key_file.flush()
                 cert_file.write(cert_pem.decode("utf-8"))
@@ -208,8 +214,15 @@ class SslUtils:
                 # LogUtils.d(cert_file.name)
                 # LogUtils.d(ca_cert_temp.name)
 
-                context = SSLContext(ssl.PROTOCOL_TLSv1_2)
+                context = SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 # context = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+                # 网关只认 TLS1.2 + AES256-GCM-SHA384,用 min/max 版本钉死等价于原先的
+                # ssl.PROTOCOL_TLSv1_2(该常量已被弃用),避免将来被移除时踩空。
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                context.maximum_version = ssl.TLSVersion.TLSv1_2
+                # 双向 TLS:客户端出示 p12 里的证书,并要求网关出示由 bks 里 CA 签发的证书。
+                # check_hostname=False 是因为网关证书的 CN/SAN 不是 LAN IP,不能按主机名校验;
+                # 校验强度由固定 CA(CERT_REQUIRED)保证,并非「关闭校验」。
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_REQUIRED
                 # context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -225,4 +238,10 @@ class SslUtils:
             traceback.print_exc()
             LogUtils.d(f"[{SslUtils.TAG}] get_lan_socket_ssl_context() exception: {e}")
             raise
+        finally:
+            for path in temp_paths:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 

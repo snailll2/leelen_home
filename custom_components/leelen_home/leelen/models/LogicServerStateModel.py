@@ -30,9 +30,10 @@ class LogicServerStateModel(SingletonMixin):
         device_status.state = state_bytes
         FlowRxBus.post(device_status)
 
-        # # 发送环境状态事件
-        env_function_ids = [18442, 22529, 16395, 18455, 18479, 18478, 18480, 18477]
-        # if function_id in env_function_ids:
+        # # 发送环境状态事件(未移植:原先只对下列功能号额外发 EnvironmentStatusEvent)
+        # # 环境类功能号:18442 温度 / 22529 空调温度 / 16395 湿度 / 18455 PM /
+        # # 18479 甲醛 / 18478 CO / 18480 VOC / 18477 光照
+        # if function_id in {18442, 22529, 16395, 18455, 18479, 18478, 18480, 18477}:
         #     env_status = EnvironmentStatusEvent()
         #     env_status.logic_address = logic_address
         #     env_status.function_id = function_id

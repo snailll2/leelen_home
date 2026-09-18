@@ -4,7 +4,8 @@ import logging
 
 from ..utils.LogUtils import LogUtils
 from .SingletonMixin import SingletonMixin
-from ..common import FunctionValue
+from ..common import FunctionValue, FunctionType
+from ..common.LeelenType import LogicDeviceType
 from ..models.DeviceStateModel import DeviceStateModel
 from ..states.LinBaseState import LinBaseState
 from ..states.LinCenterAcState import LinCenterAcState
@@ -14,6 +15,29 @@ from ..utils.ConvertUtils import ConvertUtils
 
 _LOGGER = logging.getLogger(__name__)
 
+# LeelenType 里没有为这几个值命名,就地起名并记录语义(取值保持不变)。
+#: 开关型设备服务类型(灯/开关面板),2 与 3 走同一条解析路径。
+SERVICE_TYPE_SWITCH = 2
+SERVICE_TYPE_SWITCH_ALT = 3
+#: 调光服务类型。
+SERVICE_TYPE_DIMMER = 49
+#: 地暖执行器的第二个功能号(51234 的另一变体,LeelenType 未命名)。
+FUNCTION_FLOOR_ACTUATOR_ALT = 51235
+#: 空调设定温度的编码范围:报文里以 0..14 表示 16..30℃,超出范围用 31 表示「沿用/无效」。
+AC_TEMP_ENCODE_MIN = 16
+AC_TEMP_ENCODE_MAX = 30
+AC_TEMP_ENCODE_INVALID = 31
+#: 空调风速/模式编码里的「无效值」占位。
+AC_SPEED_ENCODE_INVALID = 7
+AC_MODE_ENCODE_INVALID = 7
+AC_MODE_ENCODE_MAX = 4
+#: 解析空调上报时的兜底值(风速字段非法时按中风处理)。
+AC_SPEED_PARSE_DEFAULT = 2
+#: 默认设定温度(上报帧未给出温度时)。
+AC_TEMP_DEFAULT = 26
+#: 该服务类型上报即视为「开」(语义待真机确认;LeelenType 中 154 亦记作 TYPE_IPC)。
+SERVICE_TYPE_IMPLIES_ON = 154
+
 
 class CommonModel(SingletonMixin):
     def __init__(self):
@@ -21,47 +45,79 @@ class CommonModel(SingletonMixin):
         # self.mDeviceModel =
 
     def get_function_id_by_service_type(self, service_type: int, param2: int) -> int:
-        result = 51201  # 默认返回值
+        result = FunctionType.FUNCTION_ON_OFF  # 默认返回值
 
-        if service_type in {2, 3, 49, 514, 515, 518}:
+        if service_type in {SERVICE_TYPE_SWITCH, SERVICE_TYPE_SWITCH_ALT, SERVICE_TYPE_DIMMER,
+                            LogicDeviceType.TYPE_WIRELESS_LIGHT,
+                            LogicDeviceType.WIRELESS_OUT_PUT_SWITCH,
+                            LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET}:
             return result
-        elif service_type in {150, 662}:
-            return 51213
-        elif service_type in {152, 664, 783, 148}:
-            return 49156
-        elif service_type == 259:
-            return 55334
-        elif service_type == 561:
-            return 51203
-        elif service_type in {58, 59, 570, 571, 573, 574}:
-            return 51202
-        elif service_type in {782, 146}:
-            if param2 == 2339:
+        elif service_type in {LogicDeviceType.TYPE_FLOOR_HEATING_NEW,
+                              LogicDeviceType.ZIGBEE_FLOOR_HEARTING}:
+            return FunctionType.FUNCTION_FLOOR_HEATING
+        elif service_type in {LogicDeviceType.TYPE_REFRESH_AIR,
+                              LogicDeviceType.ZIGBEE_REFRESH_AIR,
+                              LogicDeviceType.ZIGBEE_AC_GATEWAY_REFRESH_AIR,
+                              LogicDeviceType.TYPE_VENTILATION_SYSTEM}:
+            return FunctionType.FUNCTION_LEVEL_GEARS
+        elif service_type == LogicDeviceType.ARM:
+            return FunctionType.FUNCTION_ARM
+        elif service_type == LogicDeviceType.TYPE_DIMMING_LIGHT_ZIGBEE:
+            return FunctionType.FUNCTION_LEVEL_DIMMER
+        elif service_type in {LogicDeviceType.TYPE_CURTAIN,
+                              LogicDeviceType.TYPE_SHADE_CONTROLLER,
+                              LogicDeviceType.TYPE_WIRELESS_CURTAIN,
+                              LogicDeviceType.WIRELESS_OUT_PUT_CURTAIN,
+                              LogicDeviceType.TYPE_WIRELESS_ROLL_CURTAIN,
+                              LogicDeviceType.DREAM_CURTAIN}:
+            return FunctionType.FUNCTION_CURTAIN
+        elif service_type in {LogicDeviceType.ZIGBEE_AC_GATEWAY_AC,
+                              LogicDeviceType.TYPE_CENTER_AIR_CONDITIONER}:
+            if param2 == FunctionType.FUNCTION_CENTER_AC_ZH_GROUP:
                 # FUNCTION_CENTER_AC_ZH
-                return 51256
-            return 55297
-        elif service_type == 147:
-            return 53268
-        elif service_type in {773, 778}:
-            return 51232
-        elif service_type in {774, 780}:
-            return 49185
-        elif service_type in {775, 779}:
-            return 51234
+                return FunctionType.FUNCTION_CENTER_AC_ZH
+            return FunctionType.FUNCTION_CENTER_AC
+        elif service_type == LogicDeviceType.TYPE_BACK_AUDIO_BGM:
+            return FunctionType.FUNCTION_MUSIC_ARG_CONTROL
+        elif service_type in {LogicDeviceType.TYPE_AC_ACTUATOR, LogicDeviceType.DIY_CENTER_AC}:
+            return FunctionType.FUNCTION_AC_ACTUATOR
+        elif service_type in {LogicDeviceType.TYPE_FRESH_ACTUATOR, LogicDeviceType.DIY_REFRESH_AIR}:
+            return FunctionType.FUNCTION_FRESH_ACTUATOR
+        elif service_type in {LogicDeviceType.TYPE_FLOOR_ACTUATOR, LogicDeviceType.DIY_FLOOR_HEARTING}:
+            return FunctionType.FUNCTION_FLOOR_ACTUATOR
         else:
             return result
 
     def get_control_value(self, control_type: int, state, mode: int) -> bytes:
-        if control_type in {2, 3, 571, 773, 774, 775, 778, 779, 780}:
+        if control_type in {SERVICE_TYPE_SWITCH, SERVICE_TYPE_SWITCH_ALT,
+                            LogicDeviceType.WIRELESS_OUT_PUT_CURTAIN,
+                            LogicDeviceType.TYPE_AC_ACTUATOR,
+                            LogicDeviceType.TYPE_FRESH_ACTUATOR,
+                            LogicDeviceType.TYPE_FLOOR_ACTUATOR,
+                            LogicDeviceType.DIY_CENTER_AC,
+                            LogicDeviceType.DIY_FLOOR_HEARTING,
+                            LogicDeviceType.DIY_REFRESH_AIR}:
             return self.get_switch_control_value(state)
 
-        if control_type in {146, 518, 561, 658, 662, 664}:
+        if control_type in {LogicDeviceType.TYPE_CENTER_AIR_CONDITIONER,
+                            LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET,
+                            LogicDeviceType.TYPE_DIMMING_LIGHT_ZIGBEE,
+                            LogicDeviceType.ZIGBEE_CENTER_AC,
+                            LogicDeviceType.ZIGBEE_FLOOR_HEARTING,
+                            LogicDeviceType.ZIGBEE_REFRESH_AIR}:
             return self.get_center_ac_control_value(state, mode)
 
-        if control_type in {58, 59, 514, 515}:
+        if control_type in {LogicDeviceType.TYPE_CURTAIN,
+                            LogicDeviceType.TYPE_SHADE_CONTROLLER,
+                            LogicDeviceType.TYPE_WIRELESS_LIGHT,
+                            LogicDeviceType.WIRELESS_OUT_PUT_SWITCH}:
             return self.get_curtain_control_value(state)
 
-        if control_type in {570, 573, 574, 782, 783}:
+        if control_type in {LogicDeviceType.TYPE_WIRELESS_CURTAIN,
+                            LogicDeviceType.TYPE_WIRELESS_ROLL_CURTAIN,
+                            LogicDeviceType.DREAM_CURTAIN,
+                            LogicDeviceType.ZIGBEE_AC_GATEWAY_AC,
+                            LogicDeviceType.ZIGBEE_AC_GATEWAY_REFRESH_AIR}:
             return self.get_curtain_motor_control_value(state)
 
         # 默认处理逻辑
@@ -84,22 +140,22 @@ class CommonModel(SingletonMixin):
         i5 = 1 if power_state == 1 else 0
 
         if power_state not in (0, 1):
-            i2 = 31
-            if 16 <= setting_temp <= 30:
-                i2 = setting_temp - 16
+            i2 = AC_TEMP_ENCODE_INVALID
+            if AC_TEMP_ENCODE_MIN <= setting_temp <= AC_TEMP_ENCODE_MAX:
+                i2 = setting_temp - AC_TEMP_ENCODE_MIN
 
-            if param != 2339:
-                i6 = mode if 0 <= mode <= 4 else 7
+            if param != FunctionType.FUNCTION_CENTER_AC_ZH_GROUP:
+                i6 = mode if 0 <= mode <= AC_MODE_ENCODE_MAX else AC_MODE_ENCODE_INVALID
             else:
                 i6 = mode
 
-            i3 = speed if speed >= 1 else 7
+            i3 = speed if speed >= 1 else AC_SPEED_ENCODE_INVALID
             i4 = i6
             i5 = 3
         else:
-            i2 = 31
-            i3 = 7
-            i4 = 7
+            i2 = AC_TEMP_ENCODE_INVALID
+            i3 = AC_SPEED_ENCODE_INVALID
+            i4 = AC_MODE_ENCODE_INVALID
 
         value = (i5 << 11) + (i4 << 8) + (i3 << 5) + i2
         LogUtils.i(f"get_center_ac_control_value ===>{state}  {value}")
@@ -135,16 +191,15 @@ class CommonModel(SingletonMixin):
 
     def get_cur_center_ac_state(self, i, i2, logic_server_state):
         with self._lock:
-            # 确定功能类型
-            function_type = 51232 if i in (773, 778) else 55297
-            # 获取设备状态字节
-            # logic_server_state = self.m_device_model.get_logic_server_state_by_address_and_function_type(i2, function_type)
+            # 状态字节由调用方经 logic_server_state 传入,原先按功能类型再查一次设备状态
+            # 的步骤(见下方注释)已不再需要。
+            # 原:logic_server_state = self.m_device_model.get_logic_server_state_by_address_and_function_type(i2, function_type)
 
             # 默认值初始化
             power = 1
             mode = 2
             speed = 3
-            temp = 26  # 默认温度
+            temp = AC_TEMP_DEFAULT  # 默认温度
 
             if logic_server_state and len(logic_server_state) >= 2:
                 byte0 = logic_server_state[0]
@@ -157,12 +212,12 @@ class CommonModel(SingletonMixin):
                 power = ConvertUtils.sub_byte(byte1, 3, 5)  # 3-4位，共2位
 
                 # 温度计算
-                temp_raw = sub_byte_val + 16
-                temp = min(temp_raw, 30)  # 限制温度上限
+                temp_raw = sub_byte_val + AC_TEMP_ENCODE_MIN
+                temp = min(temp_raw, AC_TEMP_ENCODE_MAX)  # 限制温度上限
 
                 # 风速校验
                 if (sub_byte2 < 1 or sub_byte2 > 3) and sub_byte2 != 5:
-                    speed = 2  # 无效值时设为默认
+                    speed = AC_SPEED_PARSE_DEFAULT  # 无效值时设为默认
                 else:
                     speed = sub_byte2
 
@@ -185,7 +240,7 @@ class CommonModel(SingletonMixin):
                     state_bytes is not None
                     and state_bytes == FunctionValue.VALUE_ON
             )
-            power_state = 1 if is_on or i2 == 154 else 0
+            power_state = 1 if is_on or i2 == SERVICE_TYPE_IMPLIES_ON else 0
 
             light_state = LinBaseState()
             light_state.set_power_state(power_state)
@@ -276,14 +331,33 @@ class CommonModel(SingletonMixin):
     
     def get_v_switch_state(self, device_addr, service_type, state_bytes):
         with self._lock:
-            power_state = 0
             # state_bytes 定义
             # \x01\x00\x00\x00 为开
             # \x02\x00\x00\x00 为关
+            # 关必须映射成 2(而不是 0):VSwitch 侧按 power_state in (1, 2) 判定这份上报
+            # 是否携带有效状态,映射成 0 会被当成「未携带」而整条丢弃,导致关状态刷不出来。
+            power_state = 0
             if state_bytes and len(state_bytes) == 4:
-                power_state = 1 if state_bytes[0]  == 0x01 else 0
-            LogUtils.d(f"VSwitch: {device_addr}, {service_type}, {state_bytes.hex() if state_bytes else None}, power_state={power_state},state_bytes[3] = {state_bytes[3]},state_bytes[2] = {state_bytes[2]},state_bytes[1] = {state_bytes[1]},state_bytes[0] = {state_bytes[0]}")
-            
+                if state_bytes[0] == 0x01:
+                    power_state = 1
+                elif state_bytes[0] == 0x02:
+                    power_state = 2
+
+            # 只在字节数足够时打印逐字节内容:原实现在 f-string 里无条件索引
+            # state_bytes[0..3],None 或短包会抛 IndexError(f-string 在调用前求值,
+            # 日志级别挡不住,而这里位于锁内且无 try)。
+            if state_bytes and len(state_bytes) >= 4:
+                LogUtils.d(
+                    f"VSwitch: {device_addr}, {service_type}, {state_bytes.hex()}, "
+                    f"power_state={power_state}, state_bytes[0..3] = "
+                    f"{state_bytes[0]},{state_bytes[1]},{state_bytes[2]},{state_bytes[3]}"
+                )
+            else:
+                LogUtils.d(
+                    f"VSwitch: {device_addr}, {service_type}, "
+                    f"state_bytes={state_bytes!r}, power_state={power_state}(长度不足,未解析)"
+                )
+
             switch_state = LinBaseState()
             switch_state.set_power_state(power_state)
             switch_state.set_service_type(service_type)
@@ -296,54 +370,83 @@ class CommonModel(SingletonMixin):
     def get_cur_state(self, device_addr, service_type, state_bytes):
         # 高优先级直接返回的情况
 
-        if service_type in {18442, 16395, 18455, 18479, 18478, 18480, 18477, 18304}:
+        if service_type in {FunctionType.FUNCTION_TEMPERATURE,
+                            FunctionType.FUNCTION_HUMIDITY,
+                            FunctionType.FUNCTION_PM,
+                            FunctionType.FUNCTION_FORMALDEHYDE,
+                            FunctionType.FUNCTION_CO,
+                            FunctionType.FUNCTION_VOC,
+                            FunctionType.FUNCTION_ILLUMINANCE,
+                            FunctionType.FUNCTION_TYPE_HORIZONTAL}:
             return self.get_cur_sensor_state(device_addr, service_type, state_bytes)
         # 55334 FUNCTION_ARM , 16267  FUNCTION_ARM_CONDITION 为虚拟开关
-        if service_type in {55334, 16267}:
+        if service_type in {FunctionType.FUNCTION_ARM, FunctionType.FUNCTION_ARM_CONDITION}:
             return self.get_v_switch_state(device_addr, service_type, state_bytes)
 
-        if service_type in {22529}:
+        if service_type in {FunctionType.FUNCTION_AC_TEMP}:
             return self.get_cur_sensor_state(device_addr, service_type, state_bytes)
 
-        if service_type in (2, 3):
+        if service_type in (SERVICE_TYPE_SWITCH, SERVICE_TYPE_SWITCH_ALT):
             return self.get_cur_switch_state(device_addr, service_type, state_bytes)
 
         # 分类处理
-        if service_type in {58, 59, 571}:
+        if service_type in {LogicDeviceType.TYPE_CURTAIN,
+                            LogicDeviceType.TYPE_SHADE_CONTROLLER,
+                            LogicDeviceType.WIRELESS_OUT_PUT_CURTAIN}:
             return self.get_cur_curtain_state(device_addr)
 
-        if service_type in {573, 570, 51202}:
+        if service_type in {LogicDeviceType.TYPE_WIRELESS_ROLL_CURTAIN,
+                            LogicDeviceType.TYPE_WIRELESS_CURTAIN,
+                            FunctionType.FUNCTION_CURTAIN}:
             return self.get_cur_curtain_motor_state(device_addr, state_bytes)
 
-        if service_type == 574:
+        if service_type == LogicDeviceType.DREAM_CURTAIN:
             return self.get_dream_curtain_state(device_addr)
 
-        if service_type in {782, 146, 658, 773, 778, 55297}:
+        if service_type in {LogicDeviceType.ZIGBEE_AC_GATEWAY_AC,
+                            LogicDeviceType.TYPE_CENTER_AIR_CONDITIONER,
+                            LogicDeviceType.ZIGBEE_CENTER_AC,
+                            LogicDeviceType.TYPE_AC_ACTUATOR,
+                            LogicDeviceType.DIY_CENTER_AC,
+                            FunctionType.FUNCTION_CENTER_AC}:
             return self.get_cur_center_ac_state(service_type, device_addr, state_bytes)
 
-        if service_type in {783, 152, 664, 774, 780, 49185}:
+        if service_type in {LogicDeviceType.ZIGBEE_AC_GATEWAY_REFRESH_AIR,
+                            LogicDeviceType.TYPE_REFRESH_AIR,
+                            LogicDeviceType.ZIGBEE_REFRESH_AIR,
+                            LogicDeviceType.TYPE_FRESH_ACTUATOR,
+                            LogicDeviceType.DIY_REFRESH_AIR,
+                            FunctionType.FUNCTION_FRESH_ACTUATOR}:
             return self.get_cur_fresh_air_module_state(service_type, device_addr, state_bytes)
 
-        if service_type in {49, 561}:
+        if service_type in {SERVICE_TYPE_DIMMER,
+                            LogicDeviceType.TYPE_DIMMING_LIGHT_ZIGBEE}:
             return self.get_cur_dimmer_state(service_type, device_addr)
 
-        if service_type == 148:
+        if service_type == LogicDeviceType.TYPE_VENTILATION_SYSTEM:
             return self.get_cur_ventilation_system_state(device_addr)
 
         # 地暖分支：包含原有类型及 51234, 51235
-        if service_type in {150, 662, 775, 779, 51234, 51235}:
+        if service_type in {LogicDeviceType.TYPE_FLOOR_HEATING_NEW,
+                            LogicDeviceType.ZIGBEE_FLOOR_HEARTING,
+                            LogicDeviceType.TYPE_FLOOR_ACTUATOR,
+                            LogicDeviceType.DIY_FLOOR_HEARTING,
+                            FunctionType.FUNCTION_FLOOR_ACTUATOR,
+                            FUNCTION_FLOOR_ACTUATOR_ALT}:
             return self.get_cur_floor_heating_state(device_addr, service_type, state_bytes)
 
-        if service_type == 158:
+        if service_type == LogicDeviceType.LADDER_CONTROL:
             return self.get_cur_ladder_state(device_addr)
 
-        if service_type == 20517:
+        if service_type == FunctionType.FUNCTION_POWER:
             return self.get_cur_sensor_power(device_addr, service_type, state_bytes)
 
-        if service_type == 518:
+        if service_type == LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET:
             return self.get_cur_smart_socket_state(device_addr)
 
-        if service_type in {567, 568, 569}:
+        if service_type in {LogicDeviceType.TYPE_RGB_TEMPERATURE_LIGHT,
+                           LogicDeviceType.TYPE_COLOR_TEMPERATURE_LIGHT,
+                           LogicDeviceType.TYPE_LIGHT_STRIP}:
             return self.get_cur_rgb_light_state(service_type, device_addr)
 
         # 默认情况：开关

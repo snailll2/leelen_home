@@ -53,3 +53,4 @@ scenes.yaml
 scripts.yaml
 secrets.yaml
 blueprints/
+.claude/settings.local.json

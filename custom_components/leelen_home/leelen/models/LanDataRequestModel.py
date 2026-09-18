@@ -7,7 +7,6 @@ from ..common import LeelenConst
 from ..common.SingletonMixin import SingletonMixin
 from ..entity.GatewayInfo import GatewayInfo
 from ..entity.User import User
-from ..entity.req.ConfigLockReq import ConfigLockReq
 from ..entity.req.FetchConfigModReq import FetchConfigModReq
 from ..entity.req.LoginReq import LoginReq
 from ..protocols.FetchModConfigLanProtocol import FetchModConfigLanProtocol
@@ -61,7 +60,6 @@ class LanDataRequestModel(SingletonMixin):
         self.request_config_fetch(fetch_req)
 
     def get_state_data(self):
-        gateway_desc = GatewayInfo.get_instance().gateway_desc_string
         clear_data = True
 
         self.fetch_device_state_data(clear_data)

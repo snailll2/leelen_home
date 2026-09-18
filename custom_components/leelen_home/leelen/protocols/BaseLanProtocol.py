@@ -76,7 +76,8 @@ class BaseLanProtocol:
             protocol.request_data_head = bytes(buffer[0:protocol.head_length])
             head_buffer = memoryview(protocol.request_data_head)
 
-            sync_header = head_buffer[0:4]
+            # 头部布局:0..3 sync_header / 4..7 length / 8..9 ver / 10..17 source / ...
+            # sync_header 与 length 仅占位对照,未参与后续解析。
             length_bytes = head_buffer[4:8]
             protocol.lan_protocol_ver = bytes(head_buffer[8:10])
             protocol.source = bytes(head_buffer[10:18])

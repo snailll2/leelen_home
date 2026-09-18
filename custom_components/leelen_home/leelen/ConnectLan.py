@@ -25,12 +25,10 @@ class ConnectHandler:
 
         arg1 = message.arg1
         what = message.what
-        result = False
 
         if what == 0:  # unicast_result
             LogUtils.d(f"msg.what = unicast_result, result={arg1}")
-            result = arg1 == 1
-            # self.connect_lan.on_unicast_listener(result)
+            # self.connect_lan.on_unicast_listener(arg1 == 1)
 
         elif what == 1:  # get_randomkey
             LogUtils.d("msg.what = get_randomkey")
@@ -104,6 +102,97 @@ class ConnectHandler:
 
     def send(self, msg):
         self.handle_message(msg)
+
+
+#: 已在协议里出现、但本移植未实现的网关上行指令(仅有日志的 case 桩)。
+#: 键为 cmd(协议号),值为原实现里的日志文案;收到时按表打日志并忽略,
+#: 未在表中的协议号则记一条 WARNING,便于发现新的指令类型。
+UNHANDLED_RESPONSE_CMDS: dict[int, str] = {
+    262: 'lan recv force quit',
+    517: 'lan recv delete device hint ',
+    518: 'lan recv device status update',
+    521: 'lan recv sensor status',
+    794: 'lan recv replace device status response',
+    796: 'lan recv config import result notify',
+    798: 'lan recv add service result',
+    1027: 'lan recv device upgrade progress response',
+    1416: 'lan recv gateway feedback protocol list',
+    33028: 'lan recv heartbeat',
+    33029: 'lan recv logout',
+    33283: 'lan recv device control',
+    33284: 'lan recv scene control',
+    33285: 'lan recv device hint',
+    33288: 'lan recv device control ex',
+    33537: 'lan recv bind',
+    33538: 'lan recv config common commit',
+    33542: '处理配置锁返回',
+    33543: 'lan recv config unlock',
+    33544: 'lan recv config file import',
+    33549: 'lan recv add floor',
+    33550: 'lan recv add room',
+    33551: 'lan recv create response',
+    33552: 'lan recv linkage response',
+    33553: 'lan recv time response',
+    33554: 'lan recv delete physical device',
+    33555: 'lan recv invite device',
+    33556: 'lan recv sync time',
+    33558: 'lan recv modify gatewayName',
+    33560: 'lan recv replace device response',
+    33561: 'lan recv replace device cancel response',
+    33562: 'lan recv delete common message ',
+    33565: 'lan recv add service response',
+    33567: 'lan recv delete service response',
+    33570: 'lan recv cancel device invite ',
+    33572: 'lan recv get 485 protocol list',
+    33573: 'lan recv add temporary password',
+    33576: 'lan recv create arm',
+    33577: 'lan recv create virtual response',
+    33578: 'lan recv delete virtual response',
+    33579: 'lan recv get real temporary password',
+    33580: 'lan recv get lock member list',
+    33581: 'lan recv get cloud status response',
+    33583: 'lan recv get diy protocol list',
+    33584: 'lan recv set diy protocol list',
+    33585: 'lan recv get diy protocol',
+    33587: 'lan recv update remote debug response',
+    33588: 'lan recv get remote debug response',
+    33796: 'lan recv device or gateway update response ',
+    33797: 'lan recv device upgrade info response',
+    34049: '处理添加红外转发器',
+    34050: '处理添加红外转发器delete',
+    34052: '增加wifi红外按键',
+    34053: 'lan recv delete ir key',
+    34054: '处理同步红外码库',
+    34177: 'lan recv bind xiao bai',
+    34178: 'lan recv bgm pass through data ',
+    34179: 'lan recv manually add condition ',
+    34180: "",
+    34181: 'lan recv cancel gateway invite protocol list',
+    34182: "",
+    34185: 'lan recv gateway invite protocol list',
+    34186: "",
+    34187: "",
+    34188: 'lan recv bind ipc protocol list',
+    34189: 'lan recv unbind ipc protocol list',
+    34190: 'lan recv add hope bgm device response',
+    34192: 'lan recv smart panel add response',
+    34193: 'lan recv screen support type response',
+    34194: 'lan recv get screen quick control response',
+    34195: 'lan recv set screen quick control response',
+    34196: 'lan recv environment support type response',
+    34197: 'lan recv get environment bind data response',
+    34198: 'lan recv set environment bind data response',
+    34199: 'lan recv submit custom skills response',
+    34200: 'lan recv get custom skills response',
+    34201: 'lan recv submit alarm skills response',
+    34202: 'lan recv get alarm skills response',
+    34203: 'lan recv set device_location response',
+    34204: 'lan recv get device location response',
+    34305: 'lan recv pass through app to device ',
+    34307: 'lan recv file write req',
+    34308: 'lan recv file read req',
+    34311: 'lan recv local history',
+}
 
 
 class ConnectLan(SingletonMixin, BaseConnect):
@@ -247,348 +336,18 @@ class ConnectLan(SingletonMixin, BaseConnect):
         lanDataResponseHandleModel = LanDataResponseHandleModel.get_instance()
         # LogUtils.d(self.tag, f">>>>>>>>>>protocol.cmd {cmd} match .<<<")
         match cmd:
-            # default:
-            #     #LogUtils.e(self.tag, ">>>protocol.cmd match none.<<<")
-            #     ConvertUtils.LogUtils.dByteArr(self.tag, "protocol.cmd", baseLanProtocol.cmd);
-            #     return
-
-            case 34311:
-                LogUtils.i(self.tag, "lan recv local history")
-                #                 lanDataResponseHandleModel.handleLocalHistoryPassThroughResponse(baseLanProtocol);
-                return
-
-            case 34308:
-                LogUtils.i(self.tag, "lan recv file read req")
-                # lanDataResponseHandleModel.handleFileReadOrWriteReq(baseLanProtocol, true);
-                return
-
-            case 34307:
-                LogUtils.i(self.tag, "lan recv file write req")
-                # lanDataResponseHandleModel.handleFileReadOrWriteReq(baseLanProtocol, false);
-                return
-
-            case 34305:
-                LogUtils.i(self.tag, "lan recv pass through app to device ")
-                # lanDataResponseHandleModel.handleAppDevicePassThroughResponse(baseLanProtocol);
-                return
-
-            case 34204:
-                LogUtils.i(self.tag, "lan recv get device location response")
-                # lanDataResponseHandleModel.handleGetDeviceLocation(baseLanProtocol);
-                return
-
-            case 34203:
-                LogUtils.i(self.tag, "lan recv set device_location response")
-                # lanDataResponseHandleModel.handleSetDeviceLocation(baseLanProtocol);
-                return
-
-            case 34202:
-                LogUtils.i(self.tag, "lan recv get alarm skills response")
-                # lanDataResponseHandleModel.handleGetVoiceAlarm(baseLanProtocol);
-                return
-
-            case 34201:
-                LogUtils.i(self.tag, "lan recv submit alarm skills response")
-                # lanDataResponseHandleModel.handleSubmitVoiceAlarm(baseLanProtocol);
-                return
-
-            case 34200:
-                LogUtils.i(self.tag, "lan recv get custom skills response")
-                # lanDataResponseHandleModel.handleGetVoiceSkill(baseLanProtocol);
-                return
-
-            case 34199:
-                LogUtils.i(self.tag, "lan recv submit custom skills response")
-                # lanDataResponseHandleModel.handleSubmitVoiceSkill(baseLanProtocol);
-                return
-
-            case 34198:
-                LogUtils.i(self.tag, "lan recv set environment bind data response")
-                # lanDataResponseHandleModel.handleSetEnvironmentBindDataResponse(baseLanProtocol);
-                return
-
-            case 34197:
-                LogUtils.i(self.tag, "lan recv get environment bind data response")
-                # lanDataResponseHandleModel.handleGetEnvironmentBindData(baseLanProtocol);
-                return
-
-            case 34196:
-                LogUtils.i(self.tag, "lan recv environment support type response")
-                # lanDataResponseHandleModel.handleEnvironmentSupportType(baseLanProtocol);
-                return
-
-            case 34195:
-                LogUtils.i(self.tag, "lan recv set screen quick control response")
-                # lanDataResponseHandleModel.handleSetQuickControlData(baseLanProtocol);
-                return
-
-            case 34194:
-                LogUtils.i(self.tag, "lan recv get screen quick control response")
-                # lanDataResponseHandleModel.handleGetQuickControlData(baseLanProtocol);
-                return
-
-            case 34193:
-                LogUtils.i(self.tag, "lan recv screen support type response")
-                # lanDataResponseHandleModel.handleQuickControlSupportType(baseLanProtocol);
-                return
-
-            case 34192:
-                LogUtils.i(self.tag, "lan recv smart panel add response")
-                # lanDataResponseHandleModel.handleSmartPanelAdd(baseLanProtocol);
-                return
-
-            case 34190:
-                LogUtils.i(self.tag, "lan recv add hope bgm device response")
-                # lanDataResponseHandleModel.handleAddHopeBgmDeviceResponse(baseLanProtocol);
-                return
-
-            case 34187:
-                return
-            case 34189:
-                LogUtils.i(self.tag, "lan recv unbind ipc protocol list")
-                # lanDataResponseHandleModel.handleIpcUnBindLanResponse(baseLanProtocol);
-                return
-
-            case 34186:
-                return
-            case 34188:
-                LogUtils.i(self.tag, "lan recv bind ipc protocol list")
-                # lanDataResponseHandleModel.handleIpcBindLanResponse(baseLanProtocol);
-                return
-
-            case 34181:
-                LogUtils.i(self.tag, "lan recv cancel gateway invite protocol list")
-                # lanDataResponseHandleModel.handleCancelGatewayDevice(baseLanProtocol);
-                return
-
-            case 34180:
-                return
-            case 34182:
-                return
-            case 34185:
-                LogUtils.i(self.tag, "lan recv gateway invite protocol list")
-                # lanDataResponseHandleModel.handleGatewayDevice(baseLanProtocol);
-                return
-
-            case 34179:
-                LogUtils.i(self.tag, "lan recv manually add condition ")
-                # lanDataResponseHandleModel.handleManuallyAddCondition(baseLanProtocol);
-                return
-
-            case 34178:
-                LogUtils.i(self.tag, "lan recv bgm pass through data ")
-                # lanDataResponseHandleModel.handleBgmPassThroughData(baseLanProtocol);
-                return
-
-            case 34177:
-                LogUtils.i(self.tag, "lan recv bind xiao bai")
-                # lanDataResponseHandleModel.handleBindXiaoBai(baseLanProtocol);
-                return
-
-            case 34054:
-                LogUtils.i(self.tag, "处理同步红外码库")
-                # lanDataResponseHandleModel.handleSyncIrCode(baseLanProtocol);
-                return
-            case 34053:
-                LogUtils.i(self.tag, "lan recv delete ir key")
-                # lanDataResponseHandleModel.handleDeleteIrKey(baseLanProtocol);
-                return
-            case 34052:
-                LogUtils.i(self.tag, "增加wifi红外按键")
-                # lanDataResponseHandleModel.handleCreateIrKey(baseLanProtocol);
-                return
-            case 34050:
-                LogUtils.i(self.tag, "处理添加红外转发器delete")
-                # lanDataResponseHandleModel.handleCreateOrDeleteIrDevice(baseLanProtocol, false);
-                return
-            case 34049:
-                LogUtils.i(self.tag, "处理添加红外转发器")
-                # lanDataResponseHandleModel.handleCreateOrDeleteIrDevice(baseLanProtocol, true);
-                return
-            case 33797:
-                LogUtils.i(self.tag, "lan recv device upgrade info response")
-                # lanDataResponseHandleModel.handleDeviceUpgradeInfoResponse(baseLanProtocol);
-                return
-
-            case 33796:
-                LogUtils.i(self.tag, "lan recv device or gateway update response ")
-                return
-
-            case 33588:
-                LogUtils.i(self.tag, "lan recv get remote debug response")
-                # lanDataResponseHandleModel.handleGetRemoteDebug(baseLanProtocol);
-                return
-
-            case 33587:
-                LogUtils.i(self.tag, "lan recv update remote debug response")
-                # lanDataResponseHandleModel.handleUpdateRemoteDebug(baseLanProtocol);
-                return
-
-            case 33585:
-                LogUtils.i(self.tag, "lan recv get diy protocol")
-                # lanDataResponseHandleModel.handleGetDiyProtocol(baseLanProtocol);
-                return
-
-            case 33584:
-                LogUtils.i(self.tag, "lan recv set diy protocol list")
-                # lanDataResponseHandleModel.handleSetDiyProtocolList(baseLanProtocol);
-                return
-
-            case 33583:
-                LogUtils.i(self.tag, "lan recv get diy protocol list")
-                # lanDataResponseHandleModel.handleGetDiyProtocolList(baseLanProtocol);
-                return
-
-            case 33581:
-                LogUtils.i(self.tag, "lan recv get cloud status response")
-                # lanDataResponseHandleModel.handleGetCloudStatus(baseLanProtocol);
-                return
-
-            case 33580:
-                LogUtils.i(self.tag, "lan recv get lock member list")
-                # lanDataResponseHandleModel.handleGetLockMemberListResponse(baseLanProtocol);
-                return
-
-            case 33579:
-                LogUtils.i(self.tag, "lan recv get real temporary password")
-                # lanDataResponseHandleModel.handleGetRealTemporaryPasswordResponse(baseLanProtocol);
-                return
-
-            case 33578:
-                LogUtils.i(self.tag, "lan recv delete virtual response")
-                # lanDataResponseHandleModel.handleDeleteVirtualResponse(baseLanProtocol);
-                return
-
-            case 33577:
-                LogUtils.i(self.tag, "lan recv create virtual response")
-                # lanDataResponseHandleModel.handleCreateVirtualResponse(baseLanProtocol);
-                return
-
-            case 33576:
-                LogUtils.i(self.tag, "lan recv create arm")
-                # lanDataResponseHandleModel.handleCreateArm(baseLanProtocol);
-                return
-
-            case 33573:
-                LogUtils.i(self.tag, "lan recv add temporary password")
-                # lanDataResponseHandleModel.handleAddTemporaryPasswordResponse(baseLanProtocol);
-                return
-
-            case 33572:
-                LogUtils.i(self.tag, "lan recv get 485 protocol list")
-                # lanDataResponseHandleModel.handleGet485ProtocolList(baseLanProtocol);
-                return
-
-            case 33570:
-                LogUtils.i(self.tag, "lan recv cancel device invite ")
-                return
-
-            case 33567:
-                LogUtils.i(self.tag, "lan recv delete service response")
-                # lanDataResponseHandleModel.handleDeleteService(baseLanProtocol);
-                return
-
-            case 33565:
-                LogUtils.i(self.tag, "lan recv add service response")
-                # lanDataResponseHandleModel.handleAddService(baseLanProtocol);
-                return
-
-            case 33562:
-                LogUtils.i(self.tag, "lan recv delete common message ")
-                # lanDataResponseHandleModel.handleDeleteCommonMsg(baseLanProtocol);
-                return
-
-            case 33561:
-                LogUtils.i(self.tag, "lan recv replace device cancel response")
-                return
-
-            case 33560:
-                LogUtils.i(self.tag, "lan recv replace device response")
-                # lanDataResponseHandleModel.handleDeviceReplace(baseLanProtocol);
-                return
-
-            case 33558:
-                LogUtils.i(self.tag, "lan recv modify gatewayName")
-                # lanDataResponseHandleModel.handleModifyGatewayName(baseLanProtocol);
-                return
-
-            case 33556:
-                LogUtils.i(self.tag, "lan recv sync time")
-                return
-
-            case 33555:
-                LogUtils.i(self.tag, "lan recv invite device")
-                # lanDataResponseHandleModel.handleDeviceInvite(baseLanProtocol);
-                return
-
-            case 33554:
-                LogUtils.i(self.tag, "lan recv delete physical device")
-                # lanDataResponseHandleModel.handleDeviceDelete(baseLanProtocol);
-                return
-
-            case 33553:
-                LogUtils.i(self.tag, "lan recv time response")
-                # lanDataResponseHandleModel.handleCreateTimer(baseLanProtocol);
-                return
-
-            case 33552:
-                LogUtils.i(self.tag, "lan recv linkage response")
-                # lanDataResponseHandleModel.handleCreateLinkage(baseLanProtocol);
-                return
-
-            case 33551:
-                LogUtils.i(self.tag, "lan recv create response")
-                # lanDataResponseHandleModel.handleCreateScene(baseLanProtocol);
-                return
-
-            case 33550:
-                LogUtils.i(self.tag, "lan recv add room")
-                # lanDataResponseHandleModel.handleCreateRoom(baseLanProtocol);
-                return
-
-            case 33549:
-                LogUtils.i(self.tag, "lan recv add floor")
-                # lanDataResponseHandleModel.handleCreateFloor(baseLanProtocol);
-                return
-
-            case 33544:
-                LogUtils.i(self.tag, "lan recv config file import")
-                # lanDataResponseHandleModel.handleConfigFileImport(baseLanProtocol);
-                return
-
-            case 33543:
-                LogUtils.i(self.tag, "lan recv config unlock")
-                return
-
-            case 33542:
-                LogUtils.i(self.tag, "处理配置锁返回")
-                # lanDataResponseHandleModel.handleConfigLock(baseLanProtocol);
-                return
             case 33541:
                 # LogUtils.i(self.tag, "处理获取配置信息返回2")
                 LogUtils.i(self.tag, f"处理获取配置信息返回2 TODO！！！！{baseLanProtocol.request_data_body}")
                 lanDataResponseHandleModel.handle_config_fetch_response(baseLanProtocol);
                 # lanDataResponseHandleModel.handleConfigFetchResponse(baseLanProtocol);
                 return
+
             case 33540:
                 LogUtils.i(self.tag, "处理查询配置信息返回")
                 lanDataResponseHandleModel.handle_config_query_response(baseLanProtocol)
                 return
 
-            case 33538:
-                LogUtils.i(self.tag, "lan recv config common commit")
-                # lanDataResponseHandleModel.handleCommonCommitConfig(baseLanProtocol);
-                return
-
-            case 33537:
-                LogUtils.i(self.tag, "lan recv bind")
-                # lanDataResponseHandleModel.handleBindLanResponse(baseLanProtocol);
-                return
-
-            case 33288:
-                LogUtils.i(self.tag, "lan recv device control ex")
-                # lanDataResponseHandleModel.handleControlDevice(baseLanProtocol);
-                return
 
             case 33287:
                 LogUtils.i(self.tag, "lan recv device status")
@@ -596,92 +355,37 @@ class ConnectLan(SingletonMixin, BaseConnect):
                 lanDataResponseHandleModel.handle_get_device_status(baseLanProtocol)
                 return
 
-            case 33285:
-                LogUtils.i(self.tag, "lan recv device hint")
-                # lanDataResponseHandleModel.handleDeviceHint(baseLanProtocol);
-                return
-
-            case 33284:
-                LogUtils.e(self.tag, "lan recv scene control")
-                # lanDataResponseHandleModel.handleControlScene(baseLanProtocol);
-                return
-
-            case 33283:
-                LogUtils.i(self.tag, "lan recv device control")
-                # lanDataResponseHandleModel.handleControlDevice(baseLanProtocol);
-                return
-
-            case 33029:
-                LogUtils.i(self.tag, "lan recv logout")
-                # lanDataResponseHandleModel.handleLogoutResponse(baseLanProtocol);
-                return
-
-            case 33028:
-                LogUtils.d(self.tag, "lan recv heartbeat")
-                return
 
             case 33027:
                 LogUtils.i(self.tag, "lan recv login")
                 lanDataResponseHandleModel.handle_login_lan_response(baseLanProtocol, self.mConnectHandler)
                 return
 
+
             case 33026:
                 LogUtils.i(self.tag, "lan recv random key")
                 lanDataResponseHandleModel.handle_random_key_response(baseLanProtocol, self.mConnectHandler)
                 return
 
-            case 1416:
-                LogUtils.i(self.tag, "lan recv gateway feedback protocol list")
-                # lanDataResponseHandleModel.handleGatewayFeedbackDevice(baseLanProtocol);
-                return
-
-            case 1027:
-                LogUtils.i(self.tag, "lan recv device upgrade progress response")
-                # lanDataResponseHandleModel.handleDeviceUpgradeProgressResponse(baseLanProtocol);
-                return
-
-            case 798:
-                LogUtils.i(self.tag, "lan recv add service result")
-                # lanDataResponseHandleModel.handleAddServiceResult(baseLanProtocol);
-                return
-
-            case 796:
-                LogUtils.i(self.tag, "lan recv config import result notify")
-                # lanDataResponseHandleModel.handleConfigImportResultNotify(baseLanProtocol);
-                return
-
-            case 794:
-                LogUtils.i(self.tag, "lan recv replace device status response")
-                # lanDataResponseHandleModel.handleDeviceReplaceStatus(baseLanProtocol);
-                return
 
             case 771:
                 LogUtils.i(self.tag, "处理配置变更通知")
                 lanDataResponseHandleModel.handle_config_modify_notify(baseLanProtocol);
                 return
 
-            case 521:
-                LogUtils.i(self.tag, "lan recv sensor status")
-                # lanDataResponseHandleModel.handleUpdateSensorStatus(baseLanProtocol);
-                return
-
-            case 518:
-                LogUtils.i(self.tag, "lan recv device status update")
-                # lanDataResponseHandleModel.handleUpdateDeviceStatus(baseLanProtocol);
-                return
-
-            case 517:
-                LogUtils.i(self.tag, "lan recv delete device hint ")
-                return
 
             case 514:
-                LogUtils.i(self.tag, f"lan recv dev status 设备状态 ")
+                LogUtils.i(self.tag, "lan recv dev status 设备状态 ")
                 lanDataResponseHandleModel.handle_device_status(baseLanProtocol)
                 # DeviceStatusLanProtocol.getInstance().updateDeviceStatus(baseLanProtocol);
                 return
 
-            case 262:
 
-                LogUtils.i(self.tag, "lan recv force quit")
-                #                this.forceLogout();
+            case _:
+                # 原实现是 84 个「只打日志就返回」的 case 桩,收敛为一张表 + 兜底分支。
+                desc = UNHANDLED_RESPONSE_CMDS.get(cmd)
+                if desc:
+                    LogUtils.i(self.tag, desc)
+                elif desc is None:
+                    LogUtils.w(self.tag, f"lan recv 未识别协议号 {cmd},忽略")
                 return

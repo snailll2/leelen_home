@@ -11,20 +11,16 @@
   ],
   "documentation": "",
   "integration_type": "hub",
-  "iot_class": "cloud_polling",
+  "iot_class": "local_push",
   "issue_tracker": "",
   "loggers": [
-    "Leelen Home"
+    "custom_components.leelen_home"
   ],
   "requirements": [
-    "construct>=2.10.56",
-    "paho-mqtt",
-    "numpy",
     "cryptography",
-    "psutil",
     "aiosqlite>=0.17.0",
     "aiohttp>=3.8.0",
     "aiofiles>=0.7.0"
   ],
-  "version": "1.1.0"
+  "version": "1.1.1"
 }

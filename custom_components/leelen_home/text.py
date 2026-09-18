@@ -1,4 +1,8 @@
-"""text 平台:只读属性展示(按 PropertyId 命名的 property_* Text 实体)。"""
+"""text 平台:只读属性展示(按 PropertyId 命名的 property_* Text 实体)。
+
+注意:本平台当前**未在 const.SUPPORTED_PLATFORMS 注册**,不会被加载;
+保留代码供后续启用(启用时需同时把它加入 SUPPORTED_PLATFORMS 与 const.ENTITY_LOGIC_TYPES 的判定)。
+"""
 from __future__ import annotations
 
 import logging
