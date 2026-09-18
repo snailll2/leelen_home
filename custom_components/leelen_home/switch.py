@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import time
-import logging
 from typing import Callable, Optional
 
 from homeassistant.components.switch import SwitchEntity
@@ -20,7 +19,6 @@ from .leelen.states.LinBaseState import LinBaseState
 from .leelen.utils.LogUtils import LogUtils
 from .platform_helper import async_setup_entry as _setup_platform
 
-_LOGGER = logging.getLogger(__name__)
 
 # 联动状态变化后,短时间内忽略设备上报驱动的回程同步(防回环),秒。
 _LINKED_SYNC_DEBOUNCE = 2.0

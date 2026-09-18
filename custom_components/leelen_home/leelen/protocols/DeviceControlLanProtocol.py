@@ -1,8 +1,8 @@
 import threading
-import logging
 
 from ..protocols.BaseLanProtocol import BaseLanProtocol
 from ..common import LanProtocolCmd
+from ..utils.LogUtils import LogUtils
 
 
 class DeviceControlLanProtocol(BaseLanProtocol):
@@ -32,7 +32,7 @@ class DeviceControlLanProtocol(BaseLanProtocol):
                 self.request_data_body = bytes(buffer)
                 return True
                 
-            logging.error(f"{self.TAG}: tlvData or mServiceAddress is null.")
+            LogUtils.e(f"{self.TAG}: tlvData or mServiceAddress is null.")
             return False
 
     def set_encode_tlv_info(self, data: bytes) -> None:

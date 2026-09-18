@@ -1,7 +1,6 @@
 """climate 平台:中心空调/地暖/新风(SUPPORTED_LOGIC_TYPES)。"""
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant.components.climate import ClimateEntity, HVACMode, ClimateEntityFeature, \
@@ -23,7 +22,6 @@ from .leelen.states.LinSensorState import LinSensorState
 from .leelen.utils.LogUtils import LogUtils
 from .platform_helper import async_setup_entry as _setup_platform
 
-_LOGGER = logging.getLogger(__name__)
 
 #: 中心空调/地暖/新风的 logic_type,定义见 const.CLIMATE_LOGIC_TYPES。
 SUPPORTED_LOGIC_TYPES = CLIMATE_LOGIC_TYPES

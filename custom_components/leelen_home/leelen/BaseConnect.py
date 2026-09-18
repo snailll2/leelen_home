@@ -68,10 +68,10 @@ class BaseConnect:
 
         # Thread pool for async operations
         # self.thread_pool = DefaultThreadPool.get_instance()
-        self.scheduled_executor: Optional[threading.Timer] = None
-        # self.heartbeat_executor: Optional[threading.Timer] = None
-        self.connect_executor: Optional[threading.Timer] = None
-        self.recv_data_executor: Optional[threading.Timer] = None
+        self.scheduled_executor: Optional[threading.Thread] = None
+        # self.heartbeat_executor: Optional[threading.Thread] = None
+        self.connect_executor: Optional[threading.Thread] = None
+        self.recv_data_executor: Optional[threading.Thread] = None
 
         # Initialize runnables
         self.r_heartbeat = self._heartbeat_runnable()
@@ -445,8 +445,8 @@ class BaseConnect:
         if data is None:
             return
 
-        if self.show_log:
-            LogUtils.d("📤 Sending data",f"{data.hex()}")
+        # 每发送一帧一条(DEBUG 级):排查收发问题时打开该模块的 debug 日志即可
+        LogUtils.d("📤 Sending data", data.hex())
         
         if self.m_socket and self.get_connect_state() == ConnectState.CONNECTED:
             def send_task():
@@ -537,10 +537,7 @@ class BaseConnect:
         # 确保scheduled_executor为None
         if self.scheduled_executor:
             LogUtils.d(self.tag," Waiting for existing heartbeat thread to stop ")
-            try:
-                self.scheduled_executor.join(timeout=1.0)
-            except Exception as e:
-                LogUtils.d(self.tag,f" Join error: {e}")
+            self._join_if_not_current(self.scheduled_executor, 1.0, self.tag)
         
         # 创建新的心跳线程
         def heartbeat_task(my_finished):
@@ -573,23 +570,31 @@ class BaseConnect:
         if self.scheduled_executor and not self.scheduled_executor.finished.is_set():
             self.scheduled_executor.finished.set()
             # 等待线程真正停止，最多等待2秒
-            try:
-                self.scheduled_executor.join(timeout=2.0)
-                LogUtils.d(self.tag," 💥 scheduled_executor joined ")
-            except Exception as e:
-                LogUtils.d(self.tag,f" Join scheduled_executor error: {e}")
+            self._join_if_not_current(self.scheduled_executor, 2.0, self.tag)
             self.scheduled_executor = None
             LogUtils.d(self.tag," 💥 scheduled_executor stoped ")
+
+    @staticmethod
+    def _join_if_not_current(target: Optional[threading.Thread], timeout: float, tag: str) -> None:
+        """join 目标线程,但当前线程就是它时直接跳过。
+
+        接收线程在 EOF/出错时会走 reset() → stop_*_executor(),而这些方法里会 join
+        接收线程本身 —— join 自己必然抛 RuntimeError(被 except 吞掉,只在日志里留下
+        「Join ... error」噪音)。这里显式跳过,语义上也没必要等自己退出。
+        """
+        if target is None or target is threading.current_thread():
+            return
+        try:
+            target.join(timeout)
+            LogUtils.d(tag, " 💥 joined ")
+        except Exception as e:
+            LogUtils.d(tag, f" Join error: {e}")
 
     def stop_connect_executor(self):
         if self.connect_executor and not self.connect_executor.finished.is_set():
             self.connect_executor.finished.set()
             # 等待线程真正停止，最多等待2秒
-            try:
-                self.connect_executor.join(timeout=2.0)
-                LogUtils.d(self.tag," 💥 connect_executor joined ")
-            except Exception as e:
-                LogUtils.d(self.tag,f" Join connect_executor error: {e}")
+            self._join_if_not_current(self.connect_executor, 2.0, self.tag)
             self.connect_executor = None
             LogUtils.d(self.tag," 💥 stop_connect_executor stoped ")
 
@@ -611,11 +616,7 @@ class BaseConnect:
                     LogUtils.d(self.tag,f" Error closing socket: {e}")
             
             # 4. 等待线程真正停止，最多等待2秒
-            try:
-                self.recv_data_executor.join(timeout=2.0)
-                LogUtils.d(self.tag," 💥 recv_data_executor joined ")
-            except Exception as e:
-                LogUtils.d(self.tag,f" Join recv_data_executor error: {e}")
+            self._join_if_not_current(self.recv_data_executor, 2.0, self.tag)
             
             # 5. 清理
             self.recv_data_executor = None

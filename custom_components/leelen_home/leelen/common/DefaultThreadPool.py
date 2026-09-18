@@ -1,4 +1,3 @@
-import logging
 import queue
 import threading
 import uuid
@@ -233,7 +232,7 @@ class DefaultThreadPool(SingletonMixin):
         except queue.Empty:
             pass
         except Exception as e:
-            logging.exception(f"Error clearing task queue: {e}")
+            LogUtils.e(f"Error clearing task queue: {e}")
 
     def shutdown(self) -> None:
         """安全关闭线程池，等待队列中的任务完成"""

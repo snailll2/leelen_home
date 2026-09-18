@@ -70,7 +70,7 @@ class LanDataResponseHandleModel(SingletonMixin):
             parsed = json.loads(protocol.request_data_body)
             ack = parsed.get("ack", 0)
         except Exception as e:
-            LogUtils.e(e)
+            LogUtils.e(self.TAG, f"登录响应解析失败: {e}")
             ack = 0
 
         LogUtils.d(f"login success ? = {ack}")

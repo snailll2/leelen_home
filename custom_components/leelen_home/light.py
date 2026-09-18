@@ -1,7 +1,6 @@
 """light 平台:无线灯(TYPE_WIRELESS_LIGHT)。"""
 from __future__ import annotations
 
-import logging
 
 from homeassistant.components.light import LightEntity, ColorMode
 from homeassistant.config_entries import ConfigEntry
@@ -16,7 +15,6 @@ from .leelen.states.LinBaseState import LinBaseState
 from .leelen.utils.LogUtils import LogUtils
 from .platform_helper import async_setup_entry as _setup_platform
 
-_LOGGER = logging.getLogger(__name__)
 
 
 def _build_entities(device_info, config_entry):

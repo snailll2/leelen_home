@@ -19,7 +19,8 @@ from custom_components.leelen_home.const import (DOMAIN, CONF_DEVICE_ADDR, CONF_
                                                  CONF_PASSWORD, ENTITY_LOGIC_TYPES,
                                                  SENSOR_LOGIC_TYPES, CLIMATE_LOGIC_TYPES,
                                                  COVER_LOGIC_TYPES, LIGHT_LOGIC_TYPES,
-                                                 SOCKET_LOGIC_TYPES)
+                                                 SOCKET_LOGIC_TYPES, CONNECT_MODE_LAN)
+from custom_components.leelen_home.state_subscription import SIGNAL_AVAILABILITY_UPDATE
 from custom_components.leelen_home.leelen.api.HttpApi import HttpApi
 from custom_components.leelen_home.leelen.common.LeelenType import LogicDeviceType
 from custom_components.leelen_home.leelen.entity.GatewayInfo import GatewayInfo
@@ -27,6 +28,23 @@ from custom_components.leelen_home.leelen.HeartbeatService import HeartbeatServi
 from custom_components.leelen_home.service import LeelenService
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _install_lan_link(logged_on: bool):
+    """把 HeartbeatService 的 LAN 连接置为替身,控制实体 available 的判据。
+
+    实体在链路未登录时会写 unavailable(这是刻意行为),所以要断言实体状态值的用例
+    必须先让链路处于「已登录」。反之传 False 可复现断线。
+    """
+    hs = HeartbeatService.get_instance()
+    hs.request_mode = CONNECT_MODE_LAN
+    if not logged_on:
+        hs.connect_lan = None
+        return None
+    conn = Mock()
+    conn.is_logged_on = Mock(return_value=True)
+    hs.connect_lan = conn
+    return conn
 
 # 一个带"智能墙面插座"(LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET=518)的假设备
 FAKE_DEVICES = [
@@ -69,6 +87,8 @@ async def test_setup_registers_entities(
         CONF_PASSWORD: "p",
     }
 
+    # 实体在链路未登录时写 unavailable,断言状态前先让链路「已登录」
+    _install_lan_link(logged_on=True)
     with (
         patch.object(HttpApi, "refresh_devices", new=AsyncMock(return_value=FAKE_DEVICES)),
         patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.168.1.50")),
@@ -163,6 +183,7 @@ async def test_setup_creates_entities_that_registry_already_knows(
     因此只能以「本次运行已添加过谁」为准,本用例守住这一点。
     """
     registry = er.async_get(hass)
+    _install_lan_link(logged_on=True)  # 链路已登录,实体才会写到真实状态
     entry = MockConfigEntry(domain=DOMAIN, data={
         CONF_DEVICE_ADDR: "gw1", CONF_USERNAME: "u", CONF_PASSWORD: "p"})
     entry.add_to_hass(hass)
@@ -293,3 +314,53 @@ async def test_refresh_stats_no_phantom_added(
 
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+@pytest.mark.asyncio
+async def test_entities_unavailable_when_link_down_then_recover(
+    hass: HomeAssistant,
+    enable_custom_integrations,
+):
+    """链路未登录时实体应为 unavailable,链路恢复后自动回到真实状态。
+
+    实体状态全部来自网关链路推送;此前实体从不实现 available,断线后界面仍显示最后
+    一次收到的旧值(看起来还能控制)。这里守住两条:断线→不可用,以及
+    service.py 广播可用性信号后实体自行恢复。
+    """
+    from homeassistant.helpers.dispatcher import async_dispatcher_send
+
+    # 先按「链路未登录」启动
+    _install_lan_link(logged_on=False)
+    with (
+        patch.object(HttpApi, "refresh_devices", new=AsyncMock(return_value=FAKE_DEVICES)),
+        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.168.1.50")),
+        patch.object(LeelenService, "async_start", new=AsyncMock(return_value=None)),
+        patch.object(LeelenService, "stop", new=Mock(return_value=None)),
+    ):
+        entry = MockConfigEntry(domain=DOMAIN, data={
+            CONF_DEVICE_ADDR: "gw1", CONF_USERNAME: "u", CONF_PASSWORD: "p"})
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        entity_id = er.async_get(hass).async_get_entity_id(
+            "switch", DOMAIN, "leelen_logic_addr_1234")
+        assert entity_id, "实体应已注册"
+        assert hass.states.get(entity_id).state == "unavailable", \
+            "链路未登录时实体应不可用(而非显示旧值)"
+
+        # 链路恢复 → 连接监控广播可用性信号 → 实体写状态
+        _install_lan_link(logged_on=True)
+        async_dispatcher_send(hass, SIGNAL_AVAILABILITY_UPDATE)
+        await hass.async_block_till_done()
+        assert hass.states.get(entity_id).state == "off", \
+            "链路恢复后实体应回到真实状态"
+
+        # 再断线 → 回到不可用
+        _install_lan_link(logged_on=False)
+        async_dispatcher_send(hass, SIGNAL_AVAILABILITY_UPDATE)
+        await hass.async_block_till_done()
+        assert hass.states.get(entity_id).state == "unavailable"
+
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()

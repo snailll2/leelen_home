@@ -2,21 +2,21 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from types import MappingProxyType
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, Event, HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import CONF_USERNAME, CONF_DEVICE_ADDR, CONF_ACCOUNT_ID, CONF_PASSWORD, CONF_GATEWAY_IP, CONF_CONNECT_MODE, CONNECT_MODE_WAN, DEFAULT_CONNECT_MODE, DOMAIN
+from .state_subscription import SIGNAL_AVAILABILITY_UPDATE
 from .leelen.common.DefaultThreadPool import DefaultThreadPool
 from .leelen.HeartbeatService import HeartbeatService
 from .leelen.entity.GatewayInfo import GatewayInfo
 from .leelen.entity.User import User
 from .leelen.utils.LogUtils import LogUtils
 
-_LOGGER = logging.getLogger(__name__)
 
 _NOTIFICATION_ID = "leelen_connection_status"
 
@@ -122,6 +122,9 @@ class LeelenService:
             else:
                 status = "connecting"
             if status != last_status:
+                # 可用性变化要立刻反映到实体上:HA 只在实体写状态时才读取 available,
+                # 链路断开/恢复本身不会触发写状态,故广播一次让各实体重写。
+                async_dispatcher_send(self._hass, SIGNAL_AVAILABILITY_UPDATE)
                 await self._update_notification(status, only_wan)
                 last_status = status
 
@@ -154,7 +157,7 @@ class LeelenService:
                 },
             )
         except Exception:  # noqa: BLE001 - 通知失败不应弄死整个监控任务
-            _LOGGER.warning("connection monitor: persistent_notification 更新失败(status=%s)", status)
+            LogUtils.w(f"connection monitor: persistent_notification 更新失败(status={status})")
 
     def stop(self) -> None:
         """Stop the service, called when component stops."""

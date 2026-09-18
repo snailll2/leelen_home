@@ -247,7 +247,7 @@ class ConnectLan(SingletonMixin, BaseConnect):
                 try:
                     socket.settimeout(0)  # Set socket to blocking mode (no timeout)
                 except Exception as e:
-                    LogUtils.e(e)
+                    LogUtils.e("ConnectLan", f"设置 socket 阻塞模式失败: {e}")
                 self.logon()
                 return
 

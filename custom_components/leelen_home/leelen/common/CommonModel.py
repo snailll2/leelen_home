@@ -1,6 +1,5 @@
 from threading import Lock
 from typing import Optional
-import logging
 
 from ..utils.LogUtils import LogUtils
 from .SingletonMixin import SingletonMixin
@@ -13,7 +12,6 @@ from ..states.LinCurtainMotorState import LinCurtainMotorState
 from ..states.LinSensorState import LinSensorState
 from ..utils.ConvertUtils import ConvertUtils
 
-_LOGGER = logging.getLogger(__name__)
 
 # LeelenType 里没有为这几个值命名,就地起名并记录语义(取值保持不变)。
 #: 开关型设备服务类型(灯/开关面板),2 与 3 走同一条解析路径。
@@ -316,8 +314,10 @@ class CommonModel(SingletonMixin):
         """解析地暖执行器状态（51234/51235/775/779）"""
         with self._lock:
             power_state = 0
-            _LOGGER.info("!!! CommonModel floor heating: addr=%s, service_type=%s, raw_bytes=%s",
-                          device_addr, service_type, state_bytes.hex() if state_bytes else None)
+            LogUtils.i(
+                f"!!! CommonModel floor heating: addr={device_addr}, service_type={service_type}, "
+                f"raw_bytes={state_bytes.hex() if state_bytes else None}"
+            )
             if state_bytes and len(state_bytes) >= 2:
                 # 第二个字节的 bit0 为开关状态：1=开，0=关
                 power_state = state_bytes[1] & 0x01

@@ -1,4 +1,3 @@
-import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -7,8 +6,8 @@ from . import room_sync
 from .const import DOMAIN, SUPPORTED_PLATFORMS, OPTIONS_CONFIG, CONF_DEVICE_ADDR, CONF_GATEWAY_IP
 from .leelen.api.HttpApi import HttpApi
 from .service import LeelenService
+from .leelen.utils.LogUtils import LogUtils
 
-_LOGGER = logging.getLogger(__name__)
 
 
 async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -29,14 +28,14 @@ async def _resolve_gateway_ip(hass: HomeAssistant, entry: ConfigEntry) -> str | 
     """
     manual_ip = (entry.options.get(OPTIONS_CONFIG, {}).get(CONF_GATEWAY_IP) or "").strip()
     if manual_ip:
-        _LOGGER.info("网关 IP 来源:options 配置值 %s", manual_ip)
+        LogUtils.i(f"网关 IP 来源:options 配置值 {manual_ip}")
         return manual_ip
 
     gateway_ip = await HttpApi.get_instance(hass).query_gateway_ip()
-    _LOGGER.info("网关 IP 来源:云端 dump.db 自动检测值 %s", gateway_ip)
+    LogUtils.i(f"网关 IP 来源:云端 dump.db 自动检测值 {gateway_ip}")
     if not gateway_ip:
         # LAN 模式拿不到地址时 BaseConnect.connect() 只会静默不连,这里点明原因。
-        _LOGGER.warning(
+        LogUtils.w(
             "未能确定网关 IP:LAN 模式无法建立连接。请在「选项 → 网关 IP」填写网关地址"
         )
     return gateway_ip

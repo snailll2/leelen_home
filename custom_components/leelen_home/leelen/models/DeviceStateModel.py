@@ -1,11 +1,10 @@
-import logging
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict
 
 from ..utils.ConvertUtils import ConvertUtils
 from ..common.SingletonMixin import SingletonMixin
+from ..utils.LogUtils import LogUtils
 
-_LOGGER = logging.getLogger(__name__)
 
 OUT_LINE = "--"
 
@@ -14,7 +13,7 @@ class DeviceStateModel(SingletonMixin):
         self._state_map: Dict[int, int] = {}
 
     def add_or_update_device_state(self, address: int, state: int):
-        _LOGGER.info(f"添加或更新设备状态，address = {address}；state = {state}")
+        LogUtils.d(f"添加或更新设备状态，address = {address}；state = {state}")
         self._state_map[address] = state
 
     def get_device_state_by_address(self, address: int) -> int:
@@ -77,7 +76,7 @@ class DeviceStateModel(SingletonMixin):
         func_ids = [18442, 22529]
         for fid in func_ids:
             # data = LogicServerStateModel.get_instance().get_logic_server_state(logic_addr, fid)
-            _LOGGER.debug(f"getTemperatureState() func {fid} is None: {data is None}")
+            LogUtils.d(f"getTemperatureState() func {fid} is None: {data is None}")
             if data and len(data) == 2:
                 high = data[1]
                 low = data[0]

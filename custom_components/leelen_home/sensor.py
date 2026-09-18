@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
@@ -18,7 +17,6 @@ from .leelen.states.LinSensorState import LinSensorState
 from .leelen.utils.LogUtils import LogUtils
 from .platform_helper import async_setup_entry as _setup_platform
 
-_LOGGER = logging.getLogger(__name__)
 
 
 #: sensor 平台的 logic_type → (device_class, 单位, 是否二元传感器)。

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import inspect
-import logging
 from typing import Any
 
 import voluptuous as vol
@@ -20,8 +19,8 @@ from .const import (DOMAIN, CONF_PHONE, CONF_DEVICE_ADDR, OPTIONS_CONFIG, OPTION
 from .leelen.api.HttpApi import HttpApi
 from .leelen.common.LeelenType import LogicDeviceType
 from .platform_helper import SIGNAL_DEVICE_REFRESH
+from .leelen.utils.LogUtils import LogUtils
 
-_LOGGER = logging.getLogger(__name__)
 
 
 def _has_supported_channel(device: dict) -> bool:
@@ -66,11 +65,11 @@ class LeelenIntegrationConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if data.get("result") == 10026:
                     errors["phone"] = "sms_rate_limit"
                 else:
-                    _LOGGER.info("验证码已发送到: %s", phone)
+                    LogUtils.i(f"验证码已发送到: {phone}")
                     return await self.async_step_verify()
             except Exception:
                 # errors 的值必须是 translations 里的 key,不能塞原始异常文本
-                _LOGGER.exception("发送验证码失败")
+                LogUtils.e("发送验证码失败")
                 errors["phone"] = "send_code_failed"
 
         return self._show_user_form(errors)
@@ -97,14 +96,14 @@ class LeelenIntegrationConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if result:
                     result[CONF_PHONE] = self._phone
                     device_addr = result.get(CONF_DEVICE_ADDR)
-                    _LOGGER.info("登录成功: %s", self._phone)
+                    LogUtils.i(f"登录成功: {self._phone}")
                     return self.async_create_entry(
                         title=f"网关：{device_addr}({self._phone})",
                         data=result,
                     )
                 errors["code"] = "invalid_code"
             except Exception:
-                _LOGGER.exception("登录失败")
+                LogUtils.e("登录失败")
                 errors["code"] = "login_failed"
 
         return self.async_show_form(
@@ -228,7 +227,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             auto = await HttpApi.get_instance(self.hass).query_gateway_ip()
         except Exception:
             # dump.db 缺失/损坏不应让这个表单打不开 —— 手动填写正是为绕开不可信的 dump 值。
-            _LOGGER.warning("读取 dump.db 自动检测网关 IP 失败,可在下方手动填写", exc_info=True)
+            LogUtils.w("读取 dump.db 自动检测网关 IP 失败,可在下方手动填写", exc_info=True)
             auto = None
         return self.async_show_form(
             step_id="gateway_ip",
@@ -314,7 +313,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             for dev in registered_devices:
                 for identifier in dev.identifiers:
                     if identifier[0] == "LEELEN_HOME" and str(identifier[1]) not in current_device_ids:
-                        _LOGGER.info("移除设备 %s，因为已从数据库中删除", identifier[1])
+                        LogUtils.i(f"移除设备 {identifier[1]}，因为已从数据库中删除")
                         device_registry.async_remove_device(dev.id)
                         removed += 1
                         break
@@ -344,7 +343,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             }
             return await self.async_step_refresh_result()
         except Exception:
-            _LOGGER.exception("刷新设备失败")
+            LogUtils.e("刷新设备失败")
             errors["base"] = "refresh_failed"
 
         return self.async_show_form(
@@ -471,7 +470,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_manage_links(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """管理已关联的实体列表"""
         linked_entities = self._config.get(OPTIONS_LINKED_ENTITIES, {})
-        _LOGGER.debug("linked_entities: %s", linked_entities)
+        LogUtils.d(f"linked_entities: {linked_entities}")
 
         if not linked_entities:
             return await self.async_step_manage_links_empty()

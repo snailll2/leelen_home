@@ -1,7 +1,6 @@
 """cover 平台:无线窗帘(TYPE_WIRELESS_CURTAIN)。"""
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant.components.cover import CoverEntity, CoverDeviceClass, CoverEntityFeature
@@ -19,7 +18,6 @@ from .leelen.states.LinCurtainMotorState import LinCurtainMotorState
 from .leelen.utils.LogUtils import LogUtils
 from .platform_helper import async_setup_entry as _setup_platform
 
-_LOGGER = logging.getLogger(__name__)
 
 
 def _build_entities(device_info, config_entry):
@@ -78,21 +76,21 @@ class Cover(LeelenEntity, CoverEntity):
         return self._attr_current_cover_position
 
     async def async_open_cover(self, **kwargs: Any) -> None:
-        _LOGGER.info("async_open_cover")
+        LogUtils.d("async_open_cover")
         self._lin.set_power_state(CURTAIN_OPEN)
         ControlModel.get_instance().control(self._lin)
         self._attr_is_closed = False
         self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
-        _LOGGER.info("async_close_cover")
+        LogUtils.d("async_close_cover")
         self._lin.set_power_state(CURTAIN_CLOSE)
         ControlModel.get_instance().control(self._lin)
         self._attr_is_closed = True
         self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
-        _LOGGER.info("async_stop_cover")
+        LogUtils.d("async_stop_cover")
         self._lin.set_power_state(CURTAIN_STOP)
         ControlModel.get_instance().control(self._lin)
         self.async_write_ha_state()

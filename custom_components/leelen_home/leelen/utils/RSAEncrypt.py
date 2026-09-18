@@ -1,9 +1,9 @@
 import base64
-import logging
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from ..utils.LogUtils import LogUtils
 
 
 class RSAEncrypt:
@@ -30,7 +30,7 @@ class RSAEncrypt:
             )
             return decrypted.decode(RSAEncrypt.CHARSET)
         except Exception as e:
-            logging.error(f"{RSAEncrypt.TAG} decrypt Exception: {str(e)}")
+            LogUtils.e(f"{RSAEncrypt.TAG} decrypt Exception: {str(e)}")
             return ""
 
     @staticmethod
@@ -65,7 +65,7 @@ class RSAEncrypt:
             return base64.b64encode(encrypted_bytes).decode('utf-8')
 
         except Exception as e:
-            logging.error(f"[RSAEncrypt] encrypt Exception: {str(e)}", exc_info=True)
+            LogUtils.e(f"[RSAEncrypt] encrypt Exception: {str(e)}")
             return ""
 
     @staticmethod
@@ -84,7 +84,7 @@ class RSAEncrypt:
             )
             return base64.b64encode(encrypted).decode(RSAEncrypt.CHARSET)
         except Exception as e:
-            logging.error(f"{RSAEncrypt.TAG} encrypt Exception: {str(e)}")
+            LogUtils.e(f"{RSAEncrypt.TAG} encrypt Exception: {str(e)}")
             return ""
 
     @staticmethod
@@ -118,5 +118,5 @@ class RSAEncrypt:
                 "privateKey": base64.b64encode(private_pem).decode(RSAEncrypt.CHARSET)
             }
         except Exception as e:
-            logging.error(f"{RSAEncrypt.TAG} gen_key_pair Exception: {str(e)}")
+            LogUtils.e(f"{RSAEncrypt.TAG} gen_key_pair Exception: {str(e)}")
             return {"publicKey": "", "privateKey": ""}

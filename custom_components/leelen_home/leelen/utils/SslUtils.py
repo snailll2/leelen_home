@@ -2,7 +2,6 @@ import binascii
 import os
 import ssl
 import tempfile
-import traceback
 from ssl import SSLContext
 
 # import jks  # 用于解析 BKS 文件
@@ -235,8 +234,7 @@ class SslUtils:
 
                 return context
         except Exception as e:
-            traceback.print_exc()
-            LogUtils.d(f"[{SslUtils.TAG}] get_lan_socket_ssl_context() exception: {e}")
+            LogUtils.e(f"[{SslUtils.TAG}] get_lan_socket_ssl_context() exception: {e}")
             raise
         finally:
             for path in temp_paths:

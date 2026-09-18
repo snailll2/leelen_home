@@ -268,38 +268,45 @@ class HttpApi(SingletonMixin):
             return await self.query_devices(db_path)
 
     async def query_devices(self, db_path: str | None = None):
-        """使用with自动管理连接"""
+        """读取设备库:每个设备带 logic_srv(仅 logic_type/srv_type 均非 0)与全部 property。
+
+        原先按设备逐条查 logic_srv_tbl / property_tbl(1+2N 次 SQL),现改为对两张表各查一次
+        再在内存里按 dev_addr 归组(固定 3 条 SQL)。
+
+        ORDER BY 是为了复现原实现的子表顺序(不是随便加的):
+        - property_tbl 原先每个设备内按 property_id 递增(查询走了主键索引);
+        - logic_srv_tbl 原先按插入顺序(rowid)。
+        logic_srv 的顺序会影响各平台建实体的先后,进而影响 HA 的 entity_id 分配,
+        故必须保持一致;property 顺序则仅为稳妥起见一并保持。
+        """
         db_path = db_path or self._hass.config.path(DUMP_DB_FILENAME)
-        result = []
         async with aiosqlite.connect(db_path) as db:
             db.row_factory = aiosqlite.Row  # ✅ 设置 row_factory 才能用 dict(row)
+
             cursor = await db.execute("select dev_addr,dev_type,dev_name,sn from dev_tbl;")
-            all_devices = await cursor.fetchall()
-            for row in all_devices:
-                device = dict(row)
+            devices = [dict(row) for row in await cursor.fetchall()]
+            for device in devices:
                 device["logic_srv"] = []
                 device["all_property"] = []
-                dev_addr, dev_type, dev_name, sn = row
-                # cursor2 = await db.execute( f"select * from logic_srv_tbl where dev_addr = '{dev_addr}' and logic_type !=0  and srv_type !=0 and display=1 ;")
-                cursor2 = await db.execute(
-                    "select * from logic_srv_tbl where dev_addr = ? and logic_type != 0 and srv_type != 0;",
-                    (dev_addr,),
-                )
-                all_logic_srv = await cursor2.fetchall()
-                for row2 in all_logic_srv:
-                    logic_srv = dict(row2)
-                    device["logic_srv"].append(logic_srv)
+            by_addr = {device["dev_addr"]: device for device in devices}
 
-                cursor3 = await db.execute(
-                    "select * from property_tbl where addr = ?;", (dev_addr,)
-                )
-                all_property = await cursor3.fetchall()
-                for row2 in all_property:
-                    property = dict(row2)
-                    device["all_property"].append(property)
+            cursor = await db.execute(
+                "select * from logic_srv_tbl where logic_type != 0 and srv_type != 0 "
+                "order by dev_addr, rowid;"
+            )
+            for row in await cursor.fetchall():
+                # 子表里可能有 dev_tbl 已经不存在的遗留行(设备被删),按存在性挂载即可。
+                device = by_addr.get(row["dev_addr"])
+                if device is not None:
+                    device["logic_srv"].append(dict(row))
 
-                result.append(device)
-        return result
+            cursor = await db.execute("select * from property_tbl order by addr, property_id;")
+            for row in await cursor.fetchall():
+                device = by_addr.get(row["addr"])
+                if device is not None:
+                    device["all_property"].append(dict(row))
+
+        return devices
 
     async def query_gateway_ip(self, db_path: str | None = None):
         """使用with自动管理连接"""

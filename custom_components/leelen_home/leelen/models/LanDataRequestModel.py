@@ -1,4 +1,3 @@
-import logging
 from threading import Lock
 
 from ..HeartbeatService import HeartbeatService
@@ -121,7 +120,7 @@ class LanDataRequestModel(SingletonMixin):
                     HeartbeatService.get_instance().request(data)
 
             except Exception as e:
-                logging.error(f"Error in request_config_fetch_list: {e}")
+                LogUtils.e(f"Error in request_config_fetch_list: {e}")
 
         #
         # lock_protocol = ConfigLockLanProtocol.get_instance()
@@ -206,10 +205,10 @@ class LanDataRequestModel(SingletonMixin):
         password = User.get_instance().password
         username = User.get_instance().username
 
-        logging.info(f"{self.TAG}: requestLogin()")
+        LogUtils.i(f"{self.TAG}: requestLogin()")
 
         if not password:
-            logging.warning(f"{self.TAG}: getPassword == null, abort.")
+            LogUtils.w(f"{self.TAG}: getPassword == null, abort.")
             return
 
         if is_temp:
@@ -224,7 +223,7 @@ class LanDataRequestModel(SingletonMixin):
             )
             dst_addr = GatewayInfo.get_instance().gateway_desc
 
-        logging.info(f"{self.TAG}: userName value: {username}")
+        LogUtils.i(f"{self.TAG}: userName value: {username}")
 
         password = password.lower()
         random_key = EncodeUtil.get_md5(f"{random_key}{password}").upper()

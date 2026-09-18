@@ -10,7 +10,7 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity import DeviceInfo
 
-from .state_subscription import StateUpdateSubscriber
+from .state_subscription import StateUpdateSubscriber, gateway_link_up
 
 
 class LeelenEntity(StateUpdateSubscriber):
@@ -56,3 +56,13 @@ class LeelenEntity(StateUpdateSubscriber):
     def is_on(self) -> bool | None:
         """Return if the entity is on."""
         return self._prop_on
+
+    @property
+    def available(self) -> bool:
+        """链路未登录时实体不可用。
+
+        实体状态全部经网关 LAN/WAN 链路推送:链路断了就没有数据来源,继续显示最后一次
+        收到的值会让人以为还能控制(此前的行为)。置为不可用后 HA 会显示为 unavailable,
+        链路恢复时由 service.py 的连接监控广播可用性信号,实体随之写状态恢复显示。
+        """
+        return gateway_link_up()

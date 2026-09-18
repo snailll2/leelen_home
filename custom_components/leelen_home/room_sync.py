@@ -10,11 +10,10 @@
 from __future__ import annotations
 
 import inspect
-import logging
 from dataclasses import dataclass
 from typing import Any
+from .leelen.utils.LogUtils import LogUtils
 
-LOGGER = logging.getLogger(__name__)
 
 
 async def _registry_call(obj: Any, method_names: tuple[str, ...], **kwargs: Any) -> Any:
@@ -188,7 +187,7 @@ async def sync_rooms_to_areas(hass, entry, *, re_download: bool = False) -> Sync
                 # AreaEntry 主键旧版叫 area_id,2026.x 改名为 id
                 area_id = getattr(area, "id", None) or getattr(area, "area_id", None)
             else:
-                LOGGER.warning("room_sync: room_id %s 在 room_tbl 无行或房间名为空,跳过", room_id)
+                LogUtils.w(f"room_sync: room_id {room_id} 在 room_tbl 无行或房间名为空,跳过")
             room_area[room_id] = area_id
             return area_id
 
@@ -205,14 +204,14 @@ async def sync_rooms_to_areas(hass, entry, *, re_download: bool = False) -> Sync
             if area_id is None:
                 stats.devices_skipped_no_area += 1
                 continue
-            LOGGER.info("room_sync: 设备 %s → 区域 %s (room_id %s)", dev_addr, area_id, room_id)
+            LogUtils.i(f"room_sync: 设备 {dev_addr} → 区域 {area_id} (room_id {room_id})")
             await _registry_call(
                 drs, ("async_update_device",), device_id=device.id, area_id=area_id
             )
             stats.devices_assigned += 1
 
     except Exception as exc:  # noqa: BLE001 - 自动路径绝不能因同步失败而炸 setup
-        LOGGER.exception("room_sync: 同步失败")
+        LogUtils.e("room_sync: 同步失败")
         stats.note = f"同步失败:{exc}"
 
     return stats
@@ -222,14 +221,10 @@ async def run_background_sync(hass, entry) -> None:
     """后台自动同步入口:异常已收敛进 SyncStats.note,这里再做一层保险。"""
     try:
         stats = await sync_rooms_to_areas(hass, entry)
-        LOGGER.info(
-            "room_sync: 自动房间→区域同步完成,房间 %s / 新建区域 %s / 分配设备 %s / "
-            "跳过(无房间) %s / 跳过(已有区域) %s",
-            stats.rooms,
-            stats.areas_created,
-            stats.devices_assigned,
-            stats.devices_skipped_no_room,
-            stats.devices_skipped_has_area,
+        LogUtils.i(
+            f"room_sync: 自动房间→区域同步完成,房间 {stats.rooms} / 新建区域 {stats.areas_created} / "
+            f"分配设备 {stats.devices_assigned} / 跳过(无房间) {stats.devices_skipped_no_room} / "
+            f"跳过(已有区域) {stats.devices_skipped_has_area}"
         )
     except Exception:  # noqa: BLE001
-        LOGGER.exception("room_sync: 后台同步异常")
+        LogUtils.e("room_sync: 后台同步异常")

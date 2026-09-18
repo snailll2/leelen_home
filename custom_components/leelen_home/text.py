@@ -5,7 +5,6 @@
 """
 from __future__ import annotations
 
-import logging
 from typing import Optional
 
 from homeassistant.components.text import TextEntity
@@ -16,8 +15,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .leelen.common import PropertyId
 from .platform_helper import async_setup_entry as _setup_platform
-
-_LOGGER = logging.getLogger(__name__)
 
 
 def _build_entities(device_info, config_entry):
