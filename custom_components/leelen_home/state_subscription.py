@@ -104,9 +104,13 @@ class StateUpdateSubscriber:
         self.async_write_ha_state()
 
     async def _handle_state_event(self, event) -> None:
-        """根据事件更新本实体状态(与旧 FlowRxBus.async_operation 语义一致)。"""
-        expected_id = f"leelen_logic_addr_{event.logic_address}"
-        if self.unique_id != expected_id:
+        """根据事件更新本实体状态(与旧 FlowRxBus.async_operation 语义一致)。
+
+        按逻辑地址匹配而非 unique_id 字符串:`LeelenEntity.unique_id` 是该地址裸 ID,
+        而插座电参数传感器(sw/开关库之外)的 unique_id 带功能后缀 —— 用字符串比会
+        漏掉它们;所有实体都持有 ``_logic_addr``,语义上才是「这个事件属于谁」。
+        """
+        if getattr(self, "_logic_addr", None) != event.logic_address:
             return
         state = CommonModel.get_instance().get_cur_state(
             event.logic_address, event.function_id, event.state

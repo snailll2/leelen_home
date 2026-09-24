@@ -46,10 +46,13 @@ class LeelenEntity(StateUpdateSubscriber):
 
     @property
     def device_info(self) -> DeviceInfo:
+        # 固件版本由 platform_helper.setup_devices_from_db 从设备库注入
+        # (dev_tbl.soft_version 解码而来);未注入(None)时 HA 自然省略该字段。
         return DeviceInfo(
             identifiers={("LEELEN_HOME", self._device_id)},
             name=self._device_name,
             manufacturer="LEELEN",
+            sw_version=getattr(self, "_soft_version", None),
         )
 
     @property

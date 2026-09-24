@@ -1,3 +1,4 @@
+from datetime import datetime
 from threading import Lock
 from typing import Optional
 
@@ -6,6 +7,7 @@ from .SingletonMixin import SingletonMixin
 from ..common import FunctionValue, FunctionType
 from ..common.LeelenType import LogicDeviceType
 from ..models.DeviceStateModel import DeviceStateModel
+from ..models.MsgStorageModel import MsgStorageModel
 from ..states.LinBaseState import LinBaseState
 from ..states.LinCenterAcState import LinCenterAcState
 from ..states.LinCurtainMotorState import LinCurtainMotorState
@@ -51,12 +53,15 @@ class CommonModel(SingletonMixin):
                             LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET}:
             return result
         elif service_type in {LogicDeviceType.TYPE_FLOOR_HEATING_NEW,
-                              LogicDeviceType.ZIGBEE_FLOOR_HEARTING}:
+                              LogicDeviceType.ZIGBEE_FLOOR_HEARTING,
+                              LogicDeviceType.TYPE_FLOOR,
+                              LogicDeviceType.TYPE_FLOOR_CONTROL}:
             return FunctionType.FUNCTION_FLOOR_HEATING
         elif service_type in {LogicDeviceType.TYPE_REFRESH_AIR,
                               LogicDeviceType.ZIGBEE_REFRESH_AIR,
                               LogicDeviceType.ZIGBEE_AC_GATEWAY_REFRESH_AIR,
-                              LogicDeviceType.TYPE_VENTILATION_SYSTEM}:
+                              LogicDeviceType.TYPE_VENTILATION_SYSTEM,
+                              LogicDeviceType.TYPE_FRESH_CONTROL}:
             return FunctionType.FUNCTION_LEVEL_GEARS
         elif service_type == LogicDeviceType.ARM:
             return FunctionType.FUNCTION_ARM
@@ -70,7 +75,9 @@ class CommonModel(SingletonMixin):
                               LogicDeviceType.DREAM_CURTAIN}:
             return FunctionType.FUNCTION_CURTAIN
         elif service_type in {LogicDeviceType.ZIGBEE_AC_GATEWAY_AC,
-                              LogicDeviceType.TYPE_CENTER_AIR_CONDITIONER}:
+                              LogicDeviceType.TYPE_CENTER_AIR_CONDITIONER,
+                              LogicDeviceType.ZIGBEE_CENTER_AC,
+                              LogicDeviceType.TYPE_AC_CONTROL}:
             if param2 == FunctionType.FUNCTION_CENTER_AC_ZH_GROUP:
                 # FUNCTION_CENTER_AC_ZH
                 return FunctionType.FUNCTION_CENTER_AC_ZH
@@ -258,6 +265,24 @@ class CommonModel(SingletonMixin):
             sensor_state.set_power(value)
             return sensor_state
 
+    def get_cur_socket_energy(self, device_addr: int, msg_storage_type: int) -> LinSensorState:
+        """插座用电量:kWh 由 msg_storage 电能缓存即时计算(事件 state 为空)。
+
+        与官方 SmartSocketModel 一致:今日用 22556(小时)首尾差 / 本月用 22557
+        (日)按天分桶。返回值携带在 LinSensorState.power 里,供
+        Switch.update_state 按 function_id 落 today_energy_kwh / month_energy_kwh。
+        """
+        with self._lock:
+            model = MsgStorageModel.get_instance()
+            now = datetime.now()
+            if msg_storage_type == FunctionType.FUNCTION_SMART_SOCKET_HOUR_POWER:
+                energy = model.today_energy(device_addr, now)
+            else:
+                energy = model.month_energy(device_addr, now)
+            sensor_state = LinSensorState()
+            sensor_state.set_power(energy)
+            return sensor_state
+
     def get_cur_curtain_motor_state(self, address: int, state_bytes) -> LinCurtainMotorState:
         with self._lock:
             # state_bytes = self.mDeviceModel.get_logic_server_state_by_address_and_function_type(address, 51202)
@@ -311,7 +336,7 @@ class CommonModel(SingletonMixin):
             return fresh_air_state
 
     def get_cur_floor_heating_state(self, device_addr, service_type, state_bytes):
-        """解析地暖执行器状态（51234/51235/775/779）"""
+        """解析地暖执行器状态（51213/51234/51235/775/776/779）"""
         with self._lock:
             power_state = 0
             LogUtils.i(
@@ -319,8 +344,9 @@ class CommonModel(SingletonMixin):
                 f"raw_bytes={state_bytes.hex() if state_bytes else None}"
             )
             if state_bytes and len(state_bytes) >= 2:
-                # 第二个字节的 bit0 为开关状态：1=开，0=关
-                power_state = state_bytes[1] & 0x01
+                # 第二个字节的 bit4 为开关状态：1=开，0=关
+                # （官方 App subByte(b1,4,6) 确认；旧代码取 bit0 是错的）
+                power_state = (state_bytes[1] & 0x10) >> 4
 
             heating_state = LinCenterAcState()
             heating_state.set_power_state(power_state)
@@ -408,6 +434,8 @@ class CommonModel(SingletonMixin):
                             LogicDeviceType.ZIGBEE_CENTER_AC,
                             LogicDeviceType.TYPE_AC_ACTUATOR,
                             LogicDeviceType.DIY_CENTER_AC,
+                            LogicDeviceType.TYPE_AC_CONTROL,
+                            FunctionType.FUNCTION_AC_ACTUATOR,
                             FunctionType.FUNCTION_CENTER_AC}:
             return self.get_cur_center_ac_state(service_type, device_addr, state_bytes)
 
@@ -416,7 +444,9 @@ class CommonModel(SingletonMixin):
                             LogicDeviceType.ZIGBEE_REFRESH_AIR,
                             LogicDeviceType.TYPE_FRESH_ACTUATOR,
                             LogicDeviceType.DIY_REFRESH_AIR,
-                            FunctionType.FUNCTION_FRESH_ACTUATOR}:
+                            LogicDeviceType.TYPE_FRESH_CONTROL,
+                            FunctionType.FUNCTION_FRESH_ACTUATOR,
+                            FunctionType.FUNCTION_LEVEL_GEARS}:
             return self.get_cur_fresh_air_module_state(service_type, device_addr, state_bytes)
 
         if service_type in {SERVICE_TYPE_DIMMER,
@@ -426,11 +456,14 @@ class CommonModel(SingletonMixin):
         if service_type == LogicDeviceType.TYPE_VENTILATION_SYSTEM:
             return self.get_cur_ventilation_system_state(device_addr)
 
-        # 地暖分支：包含原有类型及 51234, 51235
+        # 地暖分支：包含原有类型及 51213/51234, 51235
         if service_type in {LogicDeviceType.TYPE_FLOOR_HEATING_NEW,
                             LogicDeviceType.ZIGBEE_FLOOR_HEARTING,
                             LogicDeviceType.TYPE_FLOOR_ACTUATOR,
+                            LogicDeviceType.TYPE_FLOOR,
+                            LogicDeviceType.TYPE_FLOOR_CONTROL,
                             LogicDeviceType.DIY_FLOOR_HEARTING,
+                            FunctionType.FUNCTION_FLOOR_HEATING,
                             FunctionType.FUNCTION_FLOOR_ACTUATOR,
                             FUNCTION_FLOOR_ACTUATOR_ALT}:
             return self.get_cur_floor_heating_state(device_addr, service_type, state_bytes)
@@ -440,6 +473,13 @@ class CommonModel(SingletonMixin):
 
         if service_type == FunctionType.FUNCTION_POWER:
             return self.get_cur_sensor_power(device_addr, service_type, state_bytes)
+
+        # 智能插座用电量:由 AckToDao 从网关电能表合并后派发的合成事件
+        # (function_id=22556/22557,state 为空),kWh 即时从 MsgStorageModel 计算。
+        if service_type == FunctionType.FUNCTION_SMART_SOCKET_HOUR_POWER:
+            return self.get_cur_socket_energy(device_addr, msg_storage_type=FunctionType.FUNCTION_SMART_SOCKET_HOUR_POWER)
+        if service_type == FunctionType.FUNCTION_SMART_SOCKET_DAY_POWER:
+            return self.get_cur_socket_energy(device_addr, msg_storage_type=FunctionType.FUNCTION_SMART_SOCKET_DAY_POWER)
 
         if service_type == LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET:
             return self.get_cur_smart_socket_state(device_addr)

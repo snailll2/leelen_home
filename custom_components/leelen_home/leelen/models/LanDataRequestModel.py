@@ -3,6 +3,7 @@ from threading import Lock
 from ..HeartbeatService import HeartbeatService
 from ..common import DeviceType
 from ..common import LeelenConst
+from ..common.LeelenType import GatewayTable
 from ..common.SingletonMixin import SingletonMixin
 from ..entity.GatewayInfo import GatewayInfo
 from ..entity.User import User
@@ -58,12 +59,33 @@ class LanDataRequestModel(SingletonMixin):
         fetch_req.T2 = ConvertUtils.to_long(LeelenConst.FF_BYTE)
         self.request_config_fetch(fetch_req)
 
+    def fetch_msg_storage_data(self, clear_data):
+        """fetch 网关电能存储表(msg_storage_common_tbl),供插座用电量统计。
+
+        全表(T2=FF_BYTE)fetch,数据源是实时网关电能表而非 dump.db 快照。
+        响应经 handle_config_fetch_response → AckToDao.trans_msg_storage_data
+        合并进 MsgStorageModel,并向各插座派发电能事件。登录时(基线值)与
+        定时轮询(service._start_energy_poll)都会调用。
+        """
+        with self._lock:
+            LogUtils.d(f"{self.TAG}: fetchMsgStorageData()")
+
+            fetch_req = FetchConfigModReq()
+            fetch_req.tbl = GatewayTable.MSG_STORAGE_COMMON_TABLE_NAME
+            fetch_req.num = 100
+            fetch_req.type = "ins"
+            fetch_req.T1 = 0
+            fetch_req.T2 = ConvertUtils.to_long(LeelenConst.FF_BYTE)
+            self.request_config_fetch(fetch_req)
+
     def get_state_data(self):
         clear_data = True
 
         self.fetch_device_state_data(clear_data)
         self.fetch_logic_server_state_data(clear_data)
         self.fetch_sensor_state_data(clear_data)
+        # 登录即有电能基线,插座实体的今日/本月用电量立即可显示。
+        self.fetch_msg_storage_data(clear_data)
 
     # def request_bind(self, gateway_name, group_id):
     #     connect_lan = ConnectLan.get_instance()

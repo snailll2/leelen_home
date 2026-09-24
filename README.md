@@ -24,17 +24,42 @@ sensors — into Home Assistant. Device control can run **directly over LAN** or
 
 - Switchable any time from **Options → Connection Mode**; saving takes effect immediately (the integration auto-reloads).
 - In WAN mode the integration establishes **no local connection** at all, so state updates return cleanly over the cloud tunnel.
-- Default is `LAN` — existing users' behavior is unchanged.
+- Default is `LAN` — device connection is attempted over LAN first, then WAN if that fails.
 
 ### Device platforms
 
-| Platform | Devices |
+Entities are created by **logic type** (`logic_srv.logic_type`, never by hard-coded device
+names or addresses), so the same integration adapts correctly to any gateway — no per-home
+configuration. Panels that duplicate the same channel (`display = 0`) are skipped, matching
+what the official app shows.
+
+| Platform | Devices (logic types) |
 |----------|---------|
-| **Climate** | Central air-conditioner control |
-| **Cover** | Wireless curtain motor |
-| **Light** | Wireless light switch |
-| **Switch** | Zigbee smart wall socket + V switch device (VSwitch) |
-| **Sensor** | Temperature, humidity, PM2.5 sensors |
+| **Climate** | Three dedicated entity classes, dispatched by logic type: |
+| | **Air conditioner** (`AirConditioner`) — central AC, AC actuator, infrared AC, 485/KTV AC, ZigBee AC gateway (`146/242/157/658/770/773/778/782`). Single-frame control of power + mode + fan speed + target temperature; per-type function codes (55297, or 51232 for actuators). |
+| | **Fresh air fan** (`FreshAirFan`) — fresh air, ventilation system, AC-fresh combos (`148/152/664/771/774/777/780/783`). Level 0/1/2/3/0xFE = off / low / mid / high / auto; per-type function codes (49185, or 49156). |
+| | **Floor heating** (`FloorHeatingClimate`) — floor heating valve, control & actuator (`150/662/772/775/776/779`). Power bit is bit 4 of the state byte (0x10); set-temperature frames never touch the power bit, so turning up the temperature can’t accidentally switch it off (51234, or 51213). |
+| **Cover** | **Wireless curtain** (`Cover`) — wireless curtain motor (`570`). power_state 0/1/2/3 = closed / open / stop / move-to-position; exposes open / close / set-position. |
+| **Light** | **Wireless light** (`Light`) — wireless light switch (`514`). Strict on / off (no dimming); a single ON_OFF frame carries both the command and the confirmed state. |
+| **Switch** | Two entity classes: |
+| | **Smart wall socket** (`Switch`) — Zigbee smart wall socket (`518`). On / off, with power & energy on the standard attributes: `current_power_w` (raw report ×0.1 → W), `today_energy_kwh`, `month_energy_kwh` (fetched live from the gateway meter, refreshed every 10 min). |
+| | *(The same socket also exposes 3 standalone sensor entities — see **Sensor** below.)* |
+| | **V switch device** (`VSwitch`) — ARM-style arm/disarm switch (`259`). 1 = armed (on), 2 = disarmed (off); links to any HA entity by `entity_id` (Options → Link) so toggling the V switch drives the linked entity — one master arm switch for the whole house. |
+| | *(572 Dual-curtain panel is kept for legacy address matching; its channels are `srv_type=0` so they are filtered out at device query and never build an entity.)* |
+| **Sensor** | Sensor classes by logic type: |
+| | **Temperature** (`65`) — °C temperature sensor |
+| | **PM2.5** (`75`) — µg/m³ air-quality sensor |
+| | **Humidity** (`66`) — % relative-humidity sensor |
+| | **Door/window** (`586`) — binary door sensor (open / closed) |
+| | **Water leak** (`591`) — binary moisture sensor (dry / wet) |
+| | **Smart wall socket** (`518`) — standalone, page-visible power/energy sensors shared with the socket's `Switch`: **power** (`current_power_w`, W, measurement), **today energy** (`today_energy_kwh`), **month energy** (`month_energy_kwh`) — same values as the `Switch` attributes, fed by the same event stream (no extra requests). |
+| | **Gateway attributes** (`dev_addr = 0`) — one sensor per reported gateway property: **主版本** (main version), **软件版本** (software version), **IP地址**, **MAC地址**, **WiFi名称** (SSID). Only properties present in the gateway's `property_tbl` are created (older firmware with fewer properties simply yields fewer entities). |
+| | **Gateway online** (`dev_addr = 0`) — binary sensor reflecting the gateway link status (`gateway_link_up()`): `on` when the LAN/WAN link is logged in, `off` otherwise. Shares the device entry with the gateway's V switch entities (same gateway device). |
+| **Button** | Utility press-to-act entities, grouped under each device's **configuration** section: |
+| | **Device locate** (`DeviceLocateButton`) — created for every locatable physical device (real `dev_addr` that has at least one entity channel). Press sends the official **device-locate** command (DEVICE_HINT + flash mode); the device's status LED blinks for ~30 s. |
+| | **Curtain motor: change direction** (`CurtainMotorDirectionButton`) — one per curtain-motor channel that holds a writable direction property (163). Press **flips** the motor direction (wire value = `1 − current`). |
+| | **Curtain motor: reset travel** (`CurtainMotorResetButton`) — same channel as above. Press **re-triggers the travel-limit learning**, keeping the current direction bit (wire value = `direction + 2`). |
+
 
 ### Options menu
 

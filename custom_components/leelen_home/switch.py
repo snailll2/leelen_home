@@ -7,13 +7,14 @@ from typing import Callable, Optional
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import (OPTIONS_CONFIG, OPTIONS_LINKED_ENTITIES, ARM_ON_PAYLOAD, ARM_OFF_PAYLOAD,
                     LINKED_ON_STATES, VSWITCH_STATE_ON, VSWITCH_STATE_OFF, SOCKET_LOGIC_TYPES)
 from .entity_base import LeelenEntity
-from .leelen.common.LeelenType import FunctionType, FunctionValue, LogicDeviceType
+from .leelen.common.LeelenType import APCIType, FunctionType, FunctionValue, LogicDeviceType, PropertyId
 from .leelen.models.ControlModel import ControlModel
 from .leelen.states.LinBaseState import LinBaseState
 from .leelen.utils.LogUtils import LogUtils
@@ -23,13 +24,62 @@ from .platform_helper import async_setup_entry as _setup_platform
 # 联动状态变化后,短时间内忽略设备上报驱动的回程同步(防回环),秒。
 _LINKED_SYNC_DEBOUNCE = 2.0
 
+#: 面板指示灯实体 unique_id 前缀。属性 136(LIGHT_PATTERN)挂在面板设备自身
+#: (dev_addr != 0),不经过任何 logic_srv 通道 —— 实体按「设备持有可写 136 属性」
+#: 建出,故 id 直接带设备地址,不进「同步设备」清理白名单会被误删。
+PANEL_LIGHT_UNIQUE_ID_PREFIX = "leelen_panel_light"
+
+
+def _has_writable_panel_light(device_info) -> bool:
+    """设备是否有可写的面板指示灯属性 136(LIGHT_PATTERN)。
+
+    按协议定义匹配:属性存在(read_only == 0)即视为该面板支持指示灯控制,
+    不写死任何设备名/地址。网关(dev_addr==0)由 sensor 平台建属性实体,排除。
+    """
+    if str(device_info.get("dev_addr")) == "0":
+        return False
+    return any(
+        row.get("property_id") == PropertyId.LIGHT_PATTERN and row.get("read_only") == 0
+        for row in device_info.get("all_property", [])
+    )
+
+
+def _panel_light_initial_on(val) -> bool:
+    """属性 136 现值 → 初始开关态。LIGHT_PATTERN 语义推断自官方 App:01=开,00=关。
+
+    dump.db 实测各面板默认 01(开);val 以 bytes(1 字节)存储。防御:空/None 按开
+    处理(与出厂默认一致),未知字节按 >0 判开。
+    """
+    if val is None:
+        return True
+    if isinstance(val, (bytes, bytearray)):
+        return not val or val[0] != 0
+    if isinstance(val, str) and val.isdigit():
+        return int(val) != 0
+    return True
+
 
 def _build_entities(device_info, config_entry):
-    """按 logic_type 建实体:智能插座→Switch,V设备→VSwitch(绑定联动实体)。"""
+    """按 logic_type 建实体:智能插座→Switch,V设备→VSwitch(绑定联动实体);
+    面板指示灯→PanelIndicatorSwitch(属性 136 LIGHT_PATTERN 挂设备自身)。"""
     entities = []
     # 老版本曾把 options 存在 data 里,读取时保留 data 兜底。
     options = config_entry.options.get(OPTIONS_CONFIG, config_entry.data.get(OPTIONS_CONFIG, {}))
     linked_entities = options.get(OPTIONS_LINKED_ENTITIES, {})
+    # 设备级面板指示灯开关:与逻辑通道无关,一台面板一个开关。
+    # 初值取设备库属性 136 现值(all_property 由 query_devices 展开),
+    # LIGHT_PATTERN 为写私有属性(WRITE_PRIVATE_PROPERTY=0x64),载荷 [pid][val]。
+    if _has_writable_panel_light(device_info):
+        initial_val = None
+        for row in device_info.get("all_property", []):
+            if row.get("property_id") == PropertyId.LIGHT_PATTERN:
+                initial_val = row.get("val")
+                break
+        entities.append(PanelIndicatorSwitch(
+            device_info.get("dev_addr"),
+            device_info.get("dev_name"),
+            config_entry,
+            _panel_light_initial_on(initial_val)))
     for logic_srv in device_info.get("logic_srv", []):
         # 572(WIRELESS_DOUBLE_CURTAIN_PANEL):旧代码以裸数字当作插座位匹配。
         # dump.db 实测它挂在双路窗帘面板下且 srv_type=0,会被设备查询过滤,不会真正建实体。
@@ -77,13 +127,20 @@ class Switch(LeelenEntity, SwitchEntity):
 
     def __init__(self, logic_addr, device_id: str, name: str, dev_name: str, config_entry: ConfigEntry):
         super().__init__(logic_addr, device_id, name, dev_name, config_entry)
-        self._power_usage = 0.0
+        # 用电统计按 HA Switch 标准属性暴露(数据源是网关电能表实时 fetch):
+        # current_power_w = 20517 × 0.1(官方 App 口径);
+        # today_energy_kwh / month_energy_kwh = 22556/22557 由 MsgStorageModel 计算。
+        self._power_w = 0.0
+        self._today_energy_kwh = 0.0
+        self._month_energy_kwh = 0.0
 
     @property
     def extra_state_attributes(self):
         """Return entity specific state attributes."""
         return {
-            "power_usage": round(self._power_usage, 2)
+            "current_power_w": round(self._power_w, 1),
+            "today_energy_kwh": round(self._today_energy_kwh, 3),
+            "month_energy_kwh": round(self._month_energy_kwh, 1),
         }
 
     async def async_turn_on(self, **kwargs) -> None:
@@ -102,11 +159,69 @@ class Switch(LeelenEntity, SwitchEntity):
 
     async def update_state(self, state: LinBaseState):
         LogUtils.d(f"💡 {self._name} update {state}")
-        if state.get_service_type() == FunctionType.FUNCTION_ON_OFF:
+        service_type = state.get_service_type()
+        if service_type == FunctionType.FUNCTION_ON_OFF:
             self._prop_on = state.power_state == 1
-        if state.get_service_type() == FunctionType.FUNCTION_POWER:
-            self._power_usage = state.get_power()
+        elif service_type == FunctionType.FUNCTION_POWER:
+            # 功率上报(20517)原始值 × 0.1 → 瓦特(官方 App 口径)
+            self._power_w = (state.get_power() or 0) * 0.1
+        elif service_type == FunctionType.FUNCTION_SMART_SOCKET_HOUR_POWER:
+            # 今日用电:22556(小时)由 AckToDao 从电能表合并,MsgStorageModel 已算好 kWh
+            self._today_energy_kwh = state.get_power() or 0.0
+        elif service_type == FunctionType.FUNCTION_SMART_SOCKET_DAY_POWER:
+            # 本月用电:22557(日)同理
+            self._month_energy_kwh = state.get_power() or 0.0
 
+        self.async_write_ha_state()
+
+
+class PanelIndicatorSwitch(LeelenEntity, SwitchEntity):
+    """面板指示灯开关:控制面板设备自身的灯光指示(LIGHT_PATTERN 属性)。
+
+    属性 136 挂在**设备自身**(dev_addr != 0),不经过任何逻辑通道 —— 所以
+    ``_logic_addr=None`` 且不订阅状态事件,开关态按乐观更新维护;初值取自设备库
+    属性现值。控制帧经 ``ControlModel.device_control`` 走真实登录连接,
+    负载 = [136][val]:01 开 / 00 关。
+    """
+
+    # 归入设备「配置」分组,不占主控制区 —— 面板指示灯是纯设置项。
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, device_id, dev_name: str, config_entry: ConfigEntry,
+                 initial_on: bool = True):
+        # unique_id 用设备地址前缀,不能与 leelen_logic_addr_* 冲突。
+        super().__init__(None, device_id, dev_name, dev_name, config_entry)
+        self._prop_on = initial_on
+
+    @property
+    def unique_id(self) -> str:
+        return f"{PANEL_LIGHT_UNIQUE_ID_PREFIX}_{self._device_id}"
+
+    @property
+    def name(self) -> str:
+        return f"{self._device_name} 指示灯"
+
+    @property
+    def icon(self) -> str:
+        return "mdi:led-on" if self._prop_on else "mdi:led-off"
+
+    def _send(self, val: int) -> None:
+        # 私有属性写:TlvUtils 对 control_type=0x64(100)编码为 d2 57 88 xx,
+        # body = 07 4000 04 d2 57 88 xx(见 test_panel_light 写帧字节断言)。
+        ControlModel.get_instance().device_control(
+            self._device_id, APCIType.WRITE_PRIVATE_PROPERTY[0],
+            bytes([PropertyId.LIGHT_PATTERN, val]))
+
+    async def async_turn_on(self, **kwargs) -> None:
+        """Turn the panel indicator light on."""
+        self._send(1)
+        self._prop_on = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        """Turn the panel indicator light off."""
+        self._send(0)
+        self._prop_on = False
         self.async_write_ha_state()
 
 
@@ -202,6 +317,10 @@ class VSwitch(Switch):
     def extra_state_attributes(self):
         """Return entity specific state attributes."""
         attrs = super().extra_state_attributes
+        # V设备没有功率/用电概念(update_state 也不消费电能事件),剔除 Switch 的
+        # 电参数属性,避免布防开关一直顶着 current_power_w:0.0 之类误导。
+        for key in ("current_power_w", "today_energy_kwh", "month_energy_kwh"):
+            attrs.pop(key, None)
         if self._linked_entity_id:
             attrs["linked_entity"] = self._linked_entity_id
         return attrs

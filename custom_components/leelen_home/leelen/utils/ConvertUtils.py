@@ -44,6 +44,24 @@ class ConvertUtils:
         return separator.join(f"{byte:02x}" for byte in byte_array)
 
     @staticmethod
+    def decode_soft_version(raw) -> Optional[str]:
+        """解析 dev_tbl.soft_version(7 字节,前 3 字节为主/次/修订版本号)。
+
+        ``01 07 01 00 00 00 00`` → ``"1.7.1"``;空 / 全 ``0xFF``(设备未上报,
+        典型如网关自身) / 长度不足 → ``None``。已经是 str 时原样返回。
+        """
+        if raw is None:
+            return None
+        if isinstance(raw, str):
+            return raw or None
+        if not isinstance(raw, (bytes, bytearray)) or len(raw) < 3:
+            return None
+        b0, b1, b2 = raw[0], raw[1], raw[2]
+        if b0 == 0xFF and b1 == 0xFF and b2 == 0xFF:
+            return None
+        return f"{b0}.{b1}.{b2}"
+
+    @staticmethod
     def get_address_by_type(device_type: str, address: int, byteorder: str = DEFAULT_BYTEORDER) -> bytes:
         if device_type is None or len(device_type) != 4:
             raise ValueError("parameter 'deviceType' invalid.")

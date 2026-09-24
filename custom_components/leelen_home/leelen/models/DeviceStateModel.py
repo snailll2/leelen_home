@@ -34,9 +34,14 @@ class DeviceStateModel(SingletonMixin):
         return OUT_LINE
 
     def get_power_state(self, device_addr: int, logic_addr: int, data, func_id: int = 0):
-        if data:
-            return ConvertUtils.to_int(data)
-        return OUT_LINE
+        """插座功率上报(20517):4 字节小端原始计数值,单位换算在实体层。
+
+        官方 App 只认 4 字节的功率帧(raw × 0.1 = 瓦特,见 switch.Switch);
+        长度不符(脏数据/其他协议字段)一律判 0,避免把噪声当功率。
+        """
+        if not data or len(data) != 4:
+            return 0
+        return ConvertUtils.to_int(data)  # 默认小端
     def get_co_state(self, device_addr: int, logic_addr: int, data):
         return self._get_state_by_func(device_addr, logic_addr, data, 18478)
 

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from homeassistant import data_entry_flow
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.core import HomeAssistant
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -91,7 +91,7 @@ async def test_setup_registers_entities(
     _install_lan_link(logged_on=True)
     with (
         patch.object(HttpApi, "refresh_devices", new=AsyncMock(return_value=FAKE_DEVICES)),
-        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.168.1.50")),
+        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.0.2.50")),
         patch.object(LeelenService, "async_start", new=AsyncMock(return_value=None)),
         patch.object(LeelenService, "stop", new=Mock(return_value=None)),
     ):
@@ -116,15 +116,122 @@ async def test_setup_registers_entities(
     assert curtain_entity.startswith("cover.")
     assert hass.states.get(curtain_entity) is not None
 
+    # 插座(518):sensor 平台为每台插座额外建 3 个电参数传感器 —— 后缀 unique_id,
+    # 与 switch 平台的 Switch(裸 ID)并存,页面可直接看到 sensor.<插座>_当前功率 等。
+    # (断言按 unique_id 查注册表;entity_id 由 HA 从显示名转写,不硬编码。)
+    for missing_uid in (
+        "leelen_logic_addr_1234_current_power_w",
+        "leelen_logic_addr_1234_today_energy_kwh",
+        "leelen_logic_addr_1234_month_energy_kwh",
+    ):
+        socket_sensor_id = reg.async_get_entity_id("sensor", DOMAIN, missing_uid)
+        assert socket_sensor_id, f"应有 sensor 实体 (unique_id={missing_uid})"
+        assert socket_sensor_id.startswith("sensor.")
+        assert hass.states.get(socket_sensor_id) is not None
+
+
+@pytest.mark.asyncio
+async def test_gateway_entities_registered(
+    hass: HomeAssistant,
+    enable_custom_integrations,
+):
+    """网关(dev_addr==0)应注册属性 sensor 与在线 binary_sensor;面板设备固件版本
+    应写入设备注册表 sw_version(「固件」字段)。"""
+    entry_data = {
+        CONF_DEVICE_ADDR: "0123456789abcdef",
+        CONF_USERNAME: "u",
+        CONF_PASSWORD: "p",
+    }
+    gateway_dev = {
+        "dev_name": "Zigbee无线网关",
+        "dev_addr": 0,
+        "logic_srv": [],  # 网关的 ARM 通道交给 switch 平台,这里只测 sensor 分支
+        "all_property": [
+            {"property_id": 0, "val": "3.12"},
+            {"property_id": 1, "val": "192.0.2.135"},
+            {"property_id": 2, "val": "V1.02-181107"},
+            {"property_id": 164, "val": "AA:BB:CC:DD:EE:FF"},
+            {"property_id": 165, "val": "Home_WiFi"},
+        ],
+        "soft_version": None,  # 网关自身固件列全 FF(未上报)→ 注册表不显示
+    }
+    panel_dev = {
+        "dev_name": "面板64",
+        "dev_addr": 64,
+        "logic_srv": [{"logic_type": LogicDeviceType.TYPE_WIRELESS_LIGHT,
+                       "logic_addr": 65, "dev_addr": 64, "logic_name": "灯65"}],
+        "all_property": [],
+        "soft_version": "1.7.1",
+    }
+
+    _install_lan_link(logged_on=True)  # 网关在线,在线实体才显示 on
+    with (
+        patch.object(HttpApi, "refresh_devices",
+                     new=AsyncMock(return_value=[gateway_dev, panel_dev])),
+        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.0.2.50")),
+        patch.object(LeelenService, "async_start", new=AsyncMock(return_value=None)),
+        patch.object(LeelenService, "stop", new=Mock(return_value=None)),
+    ):
+        entry = MockConfigEntry(domain=DOMAIN, data=entry_data)
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    reg = er.async_get(hass)
+
+    # 5 个网关属性 sensor + 1 个在线 binary_sensor —— 均挂在 sensor 平台
+    # (HA 平台域决定 entity_id 前缀;门磁/水浸等 BinarySensor 同样是 sensor.*,
+    #  在线实体与它们一致,is_on 仍由 BinarySensorEntity 提供 "on"/"off")。
+    expected = [
+        ("sensor", "leelen_gateway_attr_main_version", "3.12"),
+        ("sensor", "leelen_gateway_attr_soft_version", "V1.02-181107"),
+        ("sensor", "leelen_gateway_attr_ip", "192.0.2.135"),
+        ("sensor", "leelen_gateway_attr_mac", "AA:BB:CC:DD:EE:FF"),
+        ("sensor", "leelen_gateway_attr_ssid", "Home_WiFi"),
+        ("sensor", "leelen_gateway_online", "on"),
+    ]
+    for platform, uid, value in expected:
+        entity_id = reg.async_get_entity_id(platform, DOMAIN, uid)
+        assert entity_id, f"应有 {platform} 实体 (unique_id={uid})"
+        state = hass.states.get(entity_id)
+        assert state is not None, f"{uid} 应有状态"
+        assert state.state == value, f"{uid} 应为 {value!r},实际 {state.state!r}"
+
+    # 在线实体归入网关设备(identifier ("LEELEN_HOME", 0)—— int,与 switch 平台
+    # VSwitch 同标识,才不会被设备注册表当成两台「Zigbee无线网关」)。
+    online_id = reg.async_get_entity_id("sensor", DOMAIN, "leelen_gateway_online")
+    dev = _get_device_by_identifier(dr.async_get(hass), ("LEELEN_HOME", 0))
+    assert dev is not None, "网关 device registry 条目应存在"
+
+    # 面板设备固件版本写入注册表「固件」字段
+    panel_dev_rec = _get_device_by_identifier(dr.async_get(hass), ("LEELEN_HOME", 64))
+    assert panel_dev_rec is not None
+    assert panel_dev_rec.sw_version == "1.7.1", (
+        f"设备注册表应显示固件 1.7.1,实际 {panel_dev_rec.sw_version}")
+    # 网关固件未上报 → 注册表不显示固件
+    assert dev.sw_version in (None, ""), f"网关固件未上报,不应有版本。实际 {dev.sw_version}"
+
+
+def _get_device_by_identifier(registry, identifier):
+    """按 (domain, id) 在设备注册表中取设备(新版 API,避开已废弃的 devices/.async_get_device)。
+
+    identifier 各段须与实体注入注册表时类型一致(网关/面板 dev_addr 是库内 int);
+    类型不一致会导致查不到 —— 这恰恰是「两台 Zigbee无线网关」的成因,守在这里。
+    """
+    for dev in registry.async_get_devices(identifiers={identifier}):
+        if identifier in dev.identifiers:
+            return dev
+    return None
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("configured_ip", "dump_ip", "expected"),
     [
         # 配置了网关 IP → 用它,且不去读 dump.db(dump 值不可信才是这个选项存在的理由)
-        ("10.0.0.9", "192.168.50.190", "10.0.0.9"),
+        ("10.0.0.9", "192.0.2.190", "10.0.0.9"),
         # 未配置 → 回落到 dump.db 自动检测值
-        ("", "192.168.50.190", "192.168.50.190"),
+        ("", "192.0.2.190", "192.0.2.190"),
     ],
 )
 async def test_gateway_ip_source_precedence(
@@ -144,8 +251,10 @@ async def test_gateway_ip_source_precedence(
         patch.object(HttpApi, "query_gateway_ip", new=dump_query),
         # 只拦掉真正的 socket 连接与状态监控,让 async_start 的其余逻辑(含
         # GatewayInfo 赋值)真实执行 —— 那才是 ConnectLan 实际取地址的地方。
+        # LAN 启动自检(49153 TCP 探测)同样会碰 socket,统一 mock 成可达。
         patch.object(HeartbeatService, "lan_conn_create", new=Mock(return_value=None)),
         patch.object(HeartbeatService, "wan_conn_open", new=Mock(return_value=None)),
+        patch.object(LeelenService, "_probe_lan", new=AsyncMock(return_value=True)),
         patch.object(LeelenService, "_start_connection_monitor", new=Mock(return_value=None)),
     ):
         entry = MockConfigEntry(domain=DOMAIN, options=options, data={
@@ -195,7 +304,7 @@ async def test_setup_creates_entities_that_registry_already_knows(
 
     with (
         patch.object(HttpApi, "refresh_devices", new=AsyncMock(return_value=FAKE_DEVICES)),
-        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.168.1.50")),
+        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.0.2.50")),
         patch.object(LeelenService, "async_start", new=AsyncMock(return_value=None)),
         patch.object(LeelenService, "stop", new=Mock(return_value=None)),
     ):
@@ -275,7 +384,7 @@ async def test_refresh_stats_no_phantom_added(
     with (
         patch.object(HttpApi, "refresh_devices",
                      new=AsyncMock(return_value=[socket_dev, no_channel_dev])),
-        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.168.1.50")),
+        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.0.2.50")),
         patch.object(LeelenService, "async_start", new=AsyncMock(return_value=None)),
         patch.object(LeelenService, "stop", new=Mock(return_value=None)),
     ):
@@ -333,7 +442,7 @@ async def test_entities_unavailable_when_link_down_then_recover(
     _install_lan_link(logged_on=False)
     with (
         patch.object(HttpApi, "refresh_devices", new=AsyncMock(return_value=FAKE_DEVICES)),
-        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.168.1.50")),
+        patch.object(HttpApi, "query_gateway_ip", new=AsyncMock(return_value="192.0.2.50")),
         patch.object(LeelenService, "async_start", new=AsyncMock(return_value=None)),
         patch.object(LeelenService, "stop", new=Mock(return_value=None)),
     ):

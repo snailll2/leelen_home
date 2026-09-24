@@ -16,11 +16,12 @@ import base64
 import threading
 
 from ...utils.LogUtils import LogUtils
-from ...common.LeelenType import GatewayTable
+from ...common.LeelenType import FunctionType, GatewayTable
 from ...common.SingletonMixin import SingletonMixin
 from ...handler.DeviceStatusEvent import DeviceStatusEvent
 from ...handler import FlowRxBus
 from ...models.LogicServerStateModel import LogicServerStateModel
+from ...models.MsgStorageModel import MsgStorageModel
 
 
 class AckToDao(SingletonMixin):
@@ -94,6 +95,78 @@ class AckToDao(SingletonMixin):
             device_state[func_id] = state_bytes
             model.add_or_update_state(logic_addr, device_state)
 
+    def trans_msg_storage_data(self, field_list, row_list):
+        """解析 msg_storage_common_tbl 电能行,合并缓存并向插座派发用电量事件。
+
+        行内字段(与网关 CSV 表头一致):link_target_code(插座的逻辑地址)、
+        rec_type(22556 小时 / 22557 日 / 22558 月)、rec_cont(base64 编码的
+        6 字节累计计数)、rec_time("yyyy-MM-dd HH:mm:ss")。其余字段(str/state_flag/
+        create_time...)不使用。
+
+        合并后对每个出现过的 link_target_code 派发两个合成事件
+        (function_id=22556/22557,state=b"")——真实 kWh 在实体侧的
+        ``CommonModel.get_cur_state`` 里从 MsgStorageModel 即时计算
+        (事件属性不足时置空,但 function_id/逻辑地址正是实体匹配依据)。
+        """
+        model = MsgStorageModel.get_instance()
+
+        try:
+            code_index = field_list.index("link_target_code")
+            rec_type_index = field_list.index("rec_type")
+            rec_time_index = field_list.index("rec_time")
+            cont_index = field_list.index("rec_cont")
+        except ValueError:
+            # 表头缺电能字段(可能只有锁档等异构行),本次增量优雅跳过
+            return
+
+        energy_rec_types = {
+            FunctionType.FUNCTION_SMART_SOCKET_HOUR_POWER,
+            FunctionType.FUNCTION_SMART_SOCKET_DAY_POWER,
+            FunctionType.FUNCTION_SMART_SOCKET_MONTH_POWER,
+        }
+
+        upserted_any = False
+        for row in row_list:
+            fields = row.split(',')
+            if len(fields) != len(field_list):
+                continue
+
+            try:
+                code = int(fields[code_index])
+                rec_type = int(fields[rec_type_index])
+                rec_time = fields[rec_time_index]
+            except (ValueError, IndexError):
+                continue
+
+            if rec_type not in energy_rec_types:
+                continue
+
+            try:
+                cont = base64.b64decode(fields[cont_index])
+            except Exception as e:
+                LogUtils.e(self.TAG, f"msg_storage rec_cont base64 decode exception : {e}")
+                continue
+
+            model.upsert(code, rec_type, rec_time, cont)
+            upserted_any = True
+
+        if not upserted_any:
+            return
+
+        # 只对「有过小时行」的插座派发今日/本月事件,避免无数据插座反复空转。
+        for code in model.codes_with_data():
+            if not model.has_type(code, FunctionType.FUNCTION_SMART_SOCKET_HOUR_POWER):
+                continue
+            for function_id in (
+                FunctionType.FUNCTION_SMART_SOCKET_HOUR_POWER,
+                FunctionType.FUNCTION_SMART_SOCKET_DAY_POWER,
+            ):
+                device_event = DeviceStatusEvent()
+                device_event.logic_address = code
+                device_event.function_id = function_id
+                device_event.state = b""
+                FlowRxBus.post(device_event)
+
     def transform_by_table(self, fetch_config_mod_ack, field_list: list[str], value_list: list[str]):
         """按表名分发到解析函数。无消费者的表直接跳过(增量无副作用)。"""
         tbl = fetch_config_mod_ack.tbl.lower()
@@ -103,6 +176,8 @@ class AckToDao(SingletonMixin):
 
         if tbl == GatewayTable.LOGIC_SERVER_STATE_TABLE_NAME.lower():
             self.trans_logic_server_state_data(field_list, value_list)
+        elif tbl == GatewayTable.MSG_STORAGE_COMMON_TABLE_NAME.lower():
+            self.trans_msg_storage_data(field_list, value_list)
 
     def transform_data(self, fetch_config_mod_ack):
         """网关配置 ack 的统一入口:首行为字段名,其余为 CSV 数据行。"""

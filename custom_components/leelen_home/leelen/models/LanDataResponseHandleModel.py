@@ -276,6 +276,9 @@ class LanDataResponseHandleModel(SingletonMixin):
                     GatewayTable.DEVICE_STATE_TABLE_NAME.lower(),
                     GatewayTable.LOGIC_SERVER_STATE_TABLE_NAME.lower(),
                     GatewayTable.SENSOR_STATE_TABLE_NAME.lower(),
+                    # 电能表同款状态类数据:分页完成后不触发 config_query 递归请求查询,
+                    # 但 transform_data 对 skip_tables 表仍会调用,电能解析链路不受影响。
+                    GatewayTable.MSG_STORAGE_COMMON_TABLE_NAME.lower(),
                 }
 
                 # if i < frame_id and fetch_config_mod_ack.tbl.lower() not in skip_tables:

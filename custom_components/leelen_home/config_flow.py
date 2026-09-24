@@ -20,6 +20,12 @@ from .leelen.api.HttpApi import HttpApi
 from .leelen.common.LeelenType import LogicDeviceType
 from .platform_helper import SIGNAL_DEVICE_REFRESH
 from .leelen.utils.LogUtils import LogUtils
+from .sensor import GATEWAY_ATTR_SUFFIXES, GATEWAY_ONLINE_UNIQUE_ID, SOCKET_ENERGY_SUFFIXES
+from .switch import PANEL_LIGHT_UNIQUE_ID_PREFIX, _has_writable_panel_light
+from .button import (
+    CURTAIN_MOTOR_DIRECTION_PREFIX, CURTAIN_MOTOR_RESET_PREFIX,
+    DEVICE_LOCATE_UNIQUE_ID_PREFIX, _curtain_motor_channels, _is_device_locatable,
+)
 
 
 
@@ -33,6 +39,48 @@ def _has_supported_channel(device: dict) -> bool:
         logic_srv.get("logic_type") in ENTITY_LOGIC_TYPES
         for logic_srv in device.get("logic_srv", [])
     )
+
+
+def _collect_expected_unique_ids(all_devices) -> set[str]:
+    """收集当前设备库应拥有的实体 unique_id。
+
+    每个逻辑通道一条裸 ID(switch/cover/climate 等平台实体),智能插座(518)
+    额外挂 3 个带后缀的电参数传感器实体(见 sensor.SOCKET_ENERGY_SUFFIXES)。
+    「同步设备」的清理逻辑(config_flow.async_step_refresh)用这张表判断哪些
+    实体属于「设备已删除」的残留 —— 漏掉任何一个后缀,刷新时都会把新建的
+    sensor 实体误删。
+    """
+    result = set()
+    for device in all_devices:
+        for logic_srv in device.get("logic_srv", []):
+            addr = logic_srv.get("logic_addr")
+            result.add(f"leelen_logic_addr_{addr}")
+            if logic_srv.get("logic_type") == LogicDeviceType.ZIGBEE_SMART_WALL_SOCKET:
+                result.update(
+                    f"leelen_logic_addr_{addr}_{suffix}"
+                    for suffix in SOCKET_ENERGY_SUFFIXES
+                )
+        # 网关(dev_addr==0)自建属性/在线实体,亦需进清理白名单,
+        # 否则「同步设备」会把它们当设备残留误删。
+        if str(device.get("dev_addr")) == "0":
+            result.add(GATEWAY_ONLINE_UNIQUE_ID)
+            result.update(f"leelen_gateway_attr_{suffix}"
+                          for suffix in GATEWAY_ATTR_SUFFIXES)
+        # 面板指示灯(id = leelen_panel_light_{dev_addr},见 switch._build_entities)
+        # 按「持有可写属性 136」建实体,列入白名单,否则同步时被误删。
+        if _has_writable_panel_light(device):
+            result.add(f"{PANEL_LIGHT_UNIQUE_ID_PREFIX}_{device.get('dev_addr')}")
+        # 定位按钮(id = leelen_device_locate_{dev_addr},见 button._build_entities)
+        # 按「可定位物理设备」建实体(与指示灯的 136 判定解耦,插座同样可定位)。
+        if _is_device_locatable(device):
+            result.add(f"{DEVICE_LOCATE_UNIQUE_ID_PREFIX}_{device.get('dev_addr')}")
+        # 窗帘电机「更改方向」/「重置行程」按钮(id = leelen_curtain_motor_{...}_{logic_addr},
+        # 见 button._build_entities),按「逻辑通道地址上有可写属性 163」建实体。
+        for logic_srv, _ in _curtain_motor_channels(device):
+            addr = logic_srv.get("logic_addr")
+            result.add(f"{CURTAIN_MOTOR_DIRECTION_PREFIX}_{addr}")
+            result.add(f"{CURTAIN_MOTOR_RESET_PREFIX}_{addr}")
+    return result
 
 
 class LeelenIntegrationConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -271,12 +319,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             self.hass.data[DOMAIN].setdefault("devices", {})
             self.hass.data[DOMAIN]["devices"][self.config_entry.entry_id] = all_devices
 
-            # 收集所有实体ID
-            all_entities = {
-                f"leelen_logic_addr_{logic_srv.get('logic_addr')}"
-                for device in all_devices
-                for logic_srv in device.get("logic_srv", [])
-            }
+            # 收集所有实体ID:裸 ID + 插座电参数传感器的后缀 ID,都算「应有实体」。
+            # (不全加进来,下面的清理逻辑会把新建的 sensor 实体误删。)
+            all_entities = _collect_expected_unique_ids(all_devices)
 
             # 获取当前设备ID集合（确保都是字符串类型）
             current_device_ids = {str(device.get("dev_addr")) for device in all_devices}

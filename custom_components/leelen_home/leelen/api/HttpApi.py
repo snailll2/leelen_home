@@ -18,6 +18,7 @@ from ..entity.BaseParam import BaseParam, CodeLoginRequestParam, GetVerifyCodeRe
 from ..entity.BaseRequest import BaseRequest
 # from ..process import get_secret
 from ..utils.AesCoder import AesCoder
+from ..utils.ConvertUtils import ConvertUtils
 from ..utils.LogUtils import LogUtils
 from ..utils.RSAEncrypt import RSAEncrypt
 
@@ -54,6 +55,7 @@ class HttpApi(SingletonMixin):
         }
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/platform/getUser",
+                verify_ssl=False,
                 headers=headers,
                 json={
                 },
@@ -89,6 +91,7 @@ class HttpApi(SingletonMixin):
 
         async with session.post(
                 f"{self.RD_BASE_URL}/rest/api/third/app/user/login",
+                verify_ssl=False,
                 headers=headers,
                 data=data,
         ) as res:
@@ -106,6 +109,7 @@ class HttpApi(SingletonMixin):
         session = async_get_clientsession(self._hass)
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/security/getVerifyCode",
+                verify_ssl=False,
                 json=baseRequest.to_dict(),
         ) as res:
             res.raise_for_status()
@@ -134,6 +138,7 @@ class HttpApi(SingletonMixin):
 
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/user/verifyCodeLogin",
+                verify_ssl=False,
                 json=baseRequest.to_dict(),
         ) as res:
             res.raise_for_status()
@@ -172,6 +177,7 @@ class HttpApi(SingletonMixin):
         session = async_get_clientsession(self._hass)
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/safe/getUuid",
+                verify_ssl=False,
                 json={},
         ) as res:
             res.raise_for_status()
@@ -219,6 +225,7 @@ class HttpApi(SingletonMixin):
         session = async_get_clientsession(self._hass)
         async with session.post(
                 f"{self.BASE_URL}/rest/app/community/user/encryptV1Login",
+                verify_ssl=False,
                 json=baseRequest.to_dict(),
         ) as res:
             res.raise_for_status()
@@ -233,7 +240,7 @@ class HttpApi(SingletonMixin):
         tmp_path = save_path + ".tmp"
         try:
             session = async_get_clientsession(self._hass)
-            async with session.get(url) as response:
+            async with session.get(url, verify_ssl=False) as response:
                 # 检查HTTP状态码
                 if response.status != 200:
                     raise ClientError(
@@ -283,11 +290,15 @@ class HttpApi(SingletonMixin):
         async with aiosqlite.connect(db_path) as db:
             db.row_factory = aiosqlite.Row  # ✅ 设置 row_factory 才能用 dict(row)
 
-            cursor = await db.execute("select dev_addr,dev_type,dev_name,sn from dev_tbl;")
+            cursor = await db.execute(
+                "select dev_addr,dev_type,dev_name,sn,soft_version from dev_tbl;")
             devices = [dict(row) for row in await cursor.fetchall()]
             for device in devices:
                 device["logic_srv"] = []
                 device["all_property"] = []
+                # 7 字节固件版本(如 01 07 01 …→"1.7.1"),网关自身全 FF 视为未知 → None。
+                device["soft_version"] = ConvertUtils.decode_soft_version(
+                    device.get("soft_version"))
             by_addr = {device["dev_addr"]: device for device in devices}
 
             cursor = await db.execute(
@@ -300,9 +311,22 @@ class HttpApi(SingletonMixin):
                 if device is not None:
                     device["logic_srv"].append(dict(row))
 
+            # 属性除了挂在设备地址(dev_addr)上,还可能挂在**逻辑通道地址**上 ——
+            # 典型是窗帘电机(dump.db 实测:dev 224/240 的可写属性 163 在 logic_addr 225/241)。
+            # 把逻辑地址也映射回所属设备,否则电机属性永远进不了设备 dict,
+            # 平台就拿不到方向等配置的初值。
+            logic_addr_to_dev = {}
+            for device in devices:
+                for logic_srv in device.get("logic_srv", []):
+                    logic_addr_to_dev[logic_srv.get("logic_addr")] = device["dev_addr"]
+
             cursor = await db.execute("select * from property_tbl order by addr, property_id;")
             for row in await cursor.fetchall():
-                device = by_addr.get(row["addr"])
+                # 先按设备地址匹配;匹配不到再按逻辑通道地址匹配(曲线电机方向/行程)。
+                addr = row["addr"]
+                device = by_addr.get(addr)
+                if device is None:
+                    device = by_addr.get(logic_addr_to_dev.get(addr))
                 if device is not None:
                     device["all_property"].append(dict(row))
 

@@ -68,6 +68,11 @@ async def setup_devices_from_db(
                 continue
             if entity.unique_id in added_ids:
                 continue
+            # 设备级固件版本(dev_tbl.soft_version)注入各实体,供 device_info.sw_version
+            # 写入设备注册表 —— 与下方按 getattr 订阅一样是 duck-type,免去改实体构造器。
+            soft_version = device_info.get("soft_version")
+            if soft_version:
+                entity._soft_version = soft_version
             entities.append(entity)
 
     # 记录本批实际要添加的 unique_id,后续 refresh 才能跳过它们。

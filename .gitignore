@@ -54,3 +54,5 @@ scripts.yaml
 secrets.yaml
 blueprints/
 .claude/settings.local.json
+# 打包产物(手动打 zip 时生成),不进仓库
+*.zip

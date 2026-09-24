@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import socket
 from types import MappingProxyType
 
 from homeassistant.config_entries import ConfigEntry
@@ -9,8 +10,11 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, Event, HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import CONF_USERNAME, CONF_DEVICE_ADDR, CONF_ACCOUNT_ID, CONF_PASSWORD, CONF_GATEWAY_IP, CONF_CONNECT_MODE, CONNECT_MODE_WAN, DEFAULT_CONNECT_MODE, DOMAIN
-from .state_subscription import SIGNAL_AVAILABILITY_UPDATE
+from .const import (
+    CONF_ACCOUNT_ID, CONF_CONNECT_MODE, CONF_DEVICE_ADDR, CONF_GATEWAY_IP, CONF_PASSWORD,
+    CONF_USERNAME, CONNECT_MODE_LAN, CONNECT_MODE_WAN, DEFAULT_CONNECT_MODE, DOMAIN,
+)
+from .state_subscription import SIGNAL_AVAILABILITY_UPDATE, gateway_link_up
 from .leelen.common.DefaultThreadPool import DefaultThreadPool
 from .leelen.HeartbeatService import HeartbeatService
 from .leelen.entity.GatewayInfo import GatewayInfo
@@ -31,6 +35,7 @@ class LeelenService:
         self._monitor_task: asyncio.Task | None = None
         # 置位=stop() 已执行,监控任务据此区分「未启动/启动初期」与「真正停止」。
         self._monitor_stop = False
+        self._energy_poll_task: asyncio.Task | None = None
         HeartbeatService.get_instance().hass = hass
 
     #
@@ -48,6 +53,12 @@ class LeelenService:
         hs = HeartbeatService.get_instance()
         hs.request_mode = config.get(CONF_CONNECT_MODE, DEFAULT_CONNECT_MODE)
         LogUtils.i(f"{LeelenService.__name__} connect mode = {hs.request_mode}")
+
+        # LAN 模式启动自检:网关 LAN 不可达时本次自动改用 WAN(仅本内存,不写回 options,
+        # 下次启动重新探测)。必须在建连接(_start)之前执行 —— _start 按 hs.request_mode 分支。
+        if hs.request_mode == CONNECT_MODE_LAN:
+            await self._maybe_fallback_to_wan()
+            LogUtils.i(f"{LeelenService.__name__} connect mode after startup probe = {hs.request_mode}")
 
         def _start(event: Event | None = None):
             # WAN 模式只起 WAN,绝不起 LAN —— WAN 回包仅在 ConnectLan.is_logged_on()==False
@@ -67,6 +78,76 @@ class LeelenService:
         # 真实连接状态监控:lan_conn_create 之后连接/登录是后台线程异步进行的,
         # 不能在此时就发「已连接」通知(网关拒绝时尤其误导)。按现状滚动更新。
         self._start_connection_monitor()
+        self._start_energy_poll()
+
+    async def _maybe_fallback_to_wan(self) -> None:
+        """LAN 启动自检:网关 49153 不可达或拿不到 IP → 本次改用 WAN(仅内存)。
+
+        与 README 的判据一致(扫网关 TCP 49153 端口,纯 TCP 握手即可,不做互信 TLS)。
+        只翻转 ``hs.request_mode``,不写回 options —— 下次启动重新探测,符合
+        「仅本次,每次启动自检」的既定策略。`_monitor_connection`/`gateway_link_up()`
+        /`request()` 都实时读 request_mode,翻转后自然改走 WAN 链路与通知文案。
+        """
+        hs = HeartbeatService.get_instance()
+        ip = self._hass.data.get(DOMAIN, {}).get(self._entry.entry_id, {}).get(CONF_GATEWAY_IP)
+        if not ip:
+            # dump.db 拿不到 IP 时 LAN 本就建不了连,直接视为不可达。
+            LogUtils.w("启动自检:未能确定网关 IP,LAN 不可用,本次自动改用 WAN")
+            hs.request_mode = CONNECT_MODE_WAN
+            return
+
+        if await self._probe_lan(ip):
+            LogUtils.i(f"启动自检:LAN 可达 {ip}:49153,保持 LAN 连接")
+            return
+
+        LogUtils.w(
+            f"启动自检:网关 {ip}:49153 不可达,本次自动改用 WAN(未写回 options,下次启动重新探测)"
+        )
+        hs.request_mode = CONNECT_MODE_WAN
+
+    async def _probe_lan(self, ip: str, port: int = 49153, timeout: float = 2.5) -> bool:
+        """在 executor 里做 TCP 探测,避免阻塞事件循环。"""
+        return await self._hass.async_add_executor_job(self._tcp_probe, ip, port, timeout)
+
+    @staticmethod
+    def _tcp_probe(ip: str, port: int, timeout: float) -> bool:
+        """纯 TCP 建连探测:2.5s 内能连上 49153 即视为 LAN 可达。"""
+        try:
+            with socket.create_connection((ip, port), timeout=timeout):
+                return True
+        except OSError:
+            return False
+
+    def _start_energy_poll(self) -> None:
+        """启动用电量轮询任务;覆盖重载前可能遗留的旧任务。
+
+        与连接监控同款 cancel-then-create 守卫。数据源(网关电能表)按小时落行,
+        10 分钟轮询足够;仅当链路已登录时 fetch,避免 WAN 未连时白跑。
+        """
+        if self._energy_poll_task and not self._energy_poll_task.done():
+            self._energy_poll_task.cancel()
+        self._energy_poll_task = self._entry.async_create_background_task(
+            self._hass, self._energy_poll_loop(), name="leelen_energy_poll"
+        )
+
+    async def _energy_poll_loop(self) -> None:
+        """周期 fetch 网关电能表(msg_storage_common_tbl),刷新插座电量属性。
+
+        覆盖 LAN/WAN 两种模式:WAN 云隧道同样把 LAN fetch 帧经 PassThroughWanProtocol
+        上行,回包进 handle_config_fetch_response → AckToDao.trans_msg_storage_data。
+        """
+        from .leelen.models.LanDataRequestModel import LanDataRequestModel
+
+        while True:
+            await asyncio.sleep(600)
+            try:
+                if gateway_link_up():
+                    # 与登录基线(get_state_data)一致:clear_data 形参为占位,接口需要传。
+                    # 缺参会让轮询任务每 10 分钟抛一次 TypeError(真机日志踩过)。
+                    LanDataRequestModel.get_instance().fetch_msg_storage_data(True)
+            except Exception as e:
+                # 轮询异常不能拖垮整个任务,记日志后继续下一轮。
+                LogUtils.e(f"energy poll failed: {e}")
 
     def _start_connection_monitor(self) -> None:
         """启动连接状态监控任务;覆盖重载前可能遗留的旧任务。
@@ -170,6 +251,11 @@ class LeelenService:
             self._monitor_stop = True
             self._hass.loop.call_soon_threadsafe(self._monitor_task.cancel)
             self._monitor_task = None
+        # 用电量轮询任务同样随 stop 取消(重启/卸载都走到这里);绑定的 entry 后台
+        # 任务在卸载时本就自动取消,显式取消是为了 async_restart 路径不悬空旧循环。
+        if self._energy_poll_task:
+            self._hass.loop.call_soon_threadsafe(self._energy_poll_task.cancel)
+            self._energy_poll_task = None
         try:
             hs = HeartbeatService.get_instance()
             # 关闭 LAN/WAN 连接(内部会停止心跳/接收线程并关 socket,并各自释放单例)。

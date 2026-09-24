@@ -1,5 +1,94 @@
 # 更新日志 / Changelog
 
+## V1.2.2 (2026-09-24)
+
+### ✨ New features
+
+- **网关属性实体** — 网关(`dev_addr=0`,名「Zigbee无线网关」)新增传感器实体,每个已上报属性一个:
+  `主版本` / `软件版本` / `IP地址` / `MAC地址` / `WiFi名称`。值取自网关 `property_tbl addr=0` 行,
+  只有设备库里有的属性才建(老固件属性少 → 实体少),值随「同步设备」刷新。
+- **网关在线 binary_sensor** — `Zigbee无线网关 在线`:状态即链路是否已登录(`gateway_link_up()`),
+  断链自动翻 `off`,恢复 `on`;与网关的 V设备(VSwitch)归入**同一设备注册条目** —— 这正是修复
+  「两台 Zigbee无线网关」的关键:此前网关属性实体把 `dev_addr` 强转成字符串,`("LEELEN_HOME", 0)`
+  与 `("LEELEN_HOME", "0")` 被设备注册表当成两台设备,现已与全平台统一为库内 int 类型。
+- **设备固件版本 → 设备注册表「固件」字段** — 每台设备的固件版本(`dev_tbl.soft_version` 前 3 字节,
+  e.g. `01 07 01…` → `1.7.1`)写入 HA 设备注册表 `sw_version`;网关自身该列未上报(全 `FF`)→ 不显示。
+  `HttpApi.query_devices` 的 `dev_tbl` SELECT 补上了此前漏掉的 `soft_version` 列。
+- **(推迟)面板「开关指示灯」** —— 协议层(仓库 / dump.db / Java 参考 / 公开资料)均无对应
+  function_id / property_id,待抓到真实帧后再实现,不臆造。
+- **Button 平台:设备定位 + 窗帘电机方向/重置行程** — 新增 `button.py` 按钮平台:
+  - **设备定位**(每台可定位物理设备一个,面板/插座/窗帘都建):按下下发官方
+    DEVICE_HINT + 闪烁指令,设备指示灯闪约 30 秒 —— 与官方 App「设备定位」按钮一致,
+    按物理地址寻址,不依赖属性 136(`leelen_device_locate_{dev_addr}`)。
+  - **窗帘电机「更改方向」**(每条持有可写方向属性 163 的窗帘电机通道一个):按下翻转
+    电机方向,写属性 `0x01A3` 值 `1 − 当前方向`(bit0=方向)。
+  - **窗帘电机「重置行程」**(同通道):按下重新触发行程学习,写属性 `0x01A3` 值
+    `当前方向 + 2`(bit1=触发重置,方向位保留)。
+  - 两个窗帘按钮走 **App 设备透传指令**(`cmd [1,6]`,逆向自官方 APK
+    `BaseManagerImpl.appDevicePassThrough`,非 DEV_CTRL TLV);目标地址是**逻辑通道地址**
+    —— dump.db 实测电机可写属性挂在 logic_addr(dev 224/240 → logic 225/241),不在
+    dev_addr 上;与更改方向按钮共享方向状态,先改方向再重置会带上新方向
+    (`leelen_curtain_motor_direction_{logic_addr}` / `leelen_curtain_motor_reset_{logic_addr}`)。
+
+### 🐛 Fixes
+
+- **两台「Zigbee无线网关」** — 网关属性/在线实体此前用 `str(dev_addr)` 作 device_id,与
+  switch 等平台(`int`)不一致,导致设备注册表把同一网关拆成两个设备条目;统一为 int 类型后合并。
+
+### 🧪 Tests
+
+- 新增 `tests/test_gateway_entity.py`(12 项):`_build_entities` 网关分支(5 属性 + 1 在线、
+  unique_id / native_value / name)、缺属性不建实体、在线 `is_on` 随链路翻转、非网关设备不产网关实体、
+  `decode_soft_version`(`01 07 01…`→1.7.1 / 全 FF→None / 空→None)、`device_info.sw_version` 注入、
+  gateway unique_id 进 config_flow 清理白名单。
+- `tests/test_integration.py` 新增 `test_gateway_entities_registered`:真实 HA 下断言 6 个网关实体已注册、
+  网关在线实体归 int 标识的网关设备、面板设备注册表 `sw_version == "1.7.1"`、网关无版本。
+- 新增 `tests/test_curtain_motor.py`(18 项):App 透传写帧字节钉死(body = `01 05 64 01 A3 01 xx`,
+  头部 cmd `[1,6]` 位于 34:36)、`_build_entities` 门控(非窗帘/只读/无属性不建)、初始方向取属性
+  163 现值 bit0、方向翻转与重置共享状态(`先翻方向再重置 → 带新方向位`)、经 HeartbeatService 全链路出帧、
+  config_flow 清理白名单。
+- 全量回归:**175 passed**。
+
+### ✨ New features
+
+- **插座功率与用电量统计** — 智能插座(`Switch`)实体新增三个 HA 标准属性:`current_power_w`(当前功率,W)、`today_energy_kwh`(今日用电)、`month_energy_kwh`(本月用电)。数据源为**实时 fetch 网关电能表**(`msg_storage_common_tbl`,登录即拉基线 + 每 10 分钟轮询),非 dump.db 快照。
+  - 功率(`20517`):4 字节小端原始计数值 ×0.1 → 瓦特(官方 App 口径);长度 ≠ 4 的脏帧一律判 0。
+  - 今日用电(`22556` 小时行)/ 本月用电(`22557` 日行):按官方 App `SmartSocketModel` 算法复刻 —— `sixByteToLong` 6 字节小端累计计数、首尾差 /10000、负差钳 0、`Decimal` `ROUND_HALF_UP`(非 Python `round` 银行家舍入);新增 `leelen/models/MsgStorageModel.py` 纯算法模块,可单测。
+  - 新增 `service._start_energy_poll` 轮询任务(LAN/WAN 双模式覆盖)。旧 `_power_usage` 字段废弃。
+  - **插座电参数升级为独立 sensor 实体**(Switch 标准属性保留,向后兼容):每台智能插座额外建 3 个页面可见的传感器 —— `current_power_w`(当前功率,W)、`today_energy_kwh`(今日用电)、`month_energy_kwh`(本月用电,均 kWh)。与 Switch 消费同一批 20517/22556/22557 事件(不另发请求);坚持按 `logic_type` 分派、`unique_id` 带功能后缀(Sensor 先于 Switch 建实体,裸 ID 会被 `_added_unique_ids` 判重),「同步设备」清理按后缀 ID 计数,不会误删新实体。
+  - 支撑改动:`state_subscription._handle_state_event` 由 `unique_id` 字符串匹配改为按 `_logic_addr` 语义匹配(e0ae176 起),后缀实体才能收到事件;`config_flow._collect_expected_unique_ids` 把 3 个后缀 ID 计入 `all_entities`。能量设备类不设 `state_class`(周期快照值,避免 HA device_class/state_class 组合告警)。
+
+### 🐛 Fixes
+
+- **插座功率单位错误** — 原实现直接展示 20517 原始计数值,现按官方 App 修正为 ×0.1 瓦特;补 `len==4` 守卫,脏数据不再当功率。
+
+### 🧪 Tests
+
+- 新增 `tests/test_socket_energy.py`(24 项):`MsgStorageModel` 纯算法(首尾差 / 日桶覆盖 / 今日桶覆盖 / 负差钳 0 / 不足 2 行→0)、`AckToDao.trans_msg_storage_data` CSV 解析与事件派发、`CommonModel` 22556/22557 分支、`DeviceStateModel` len==4 守卫、`Switch.update_state` 属性落盘、`fetch_msg_storage_data` 请求参数。
+- 新增 `tests/test_socket_sensor.py`(13 项):`_build_entities` 518 展开成 3 个 `SocketSensor`(unique_id 后缀 / device_class / 单位 / state_class)、`SocketSensor.update_state` 按 (kind, service_type) 分支、`_handle_state_event` 按逻辑地址匹配(后缀实体收到事件)、`config_flow._collect_expected_unique_ids` 含后缀 ID。集成测试追加 3 个 sensor 实体注册断言。全套 **102 项通过**。
+
+## V1.2.0 (2026-09-23)
+
+### ✨ New features
+
+- **空调 / 新风 / 地暖三分类适配** — `climate.py` 从单一 `Climate` 类重写为 `AirConditioner` / `FreshAirFan` / `FloorHeatingClimate` 三个专用类。实体按 `logic_srv.logic_type`(逻辑类型)分派,不再按设备名(`dev_name`)写死匹配 —— 不针对任何一套房子设计,任意网关的同类设备都能正确建出专用实体。
+  - `AirConditioner`(`146/658/770/773/778/782/242/157`):单帧携带 开关+模式+风速+目标温度,byte0=(风速<<5)|(温度-16)、byte1=(开关<<3)|模式。
+  - `FreshAirFan`(`771/774/777/780/783/148/152/664`):level 0/1/2/3/0xFE = 关/低/中/高/自动,单字节载荷。
+  - `FloorHeatingClimate`(`772/775/776/779/150/662`):电源位 = 状态字节 **bit4**(0x10,官方 App `subByte(b1,4,6)` 确认);调温只发温度帧、开关帧置位 bit4,互不误伤。
+- **兼容更多官方逻辑类型** — `CLIMATE_LOGIC_TYPES` 补全为官方全集(新增 773/778/779/780/782/783/148/150/152/242/157/662/664),此前只在官方 App 出现的设备类型现在也能建出实体。
+- **尊重网关 `display` 清单** — `display=0` 的逻辑服务(官方 App 里被隐藏的面板重复通道)不再建实体,与官方 App 展示一致;对普通网关(display 恒为 1)零影响。
+
+### 🐛 Fixes
+
+- **地暖电源位解析错误** — `CommonModel.get_cur_floor_heating_state` 误读 bit0,按官方 App 修正为 bit4(0x10)。
+- **空调/地暖控制功能码缺映射** — 658(ZigBee 中心空调)此前落到默认 `FUNCTION_ON_OFF`(51201),现并入 55297 分支;776(地板加热器)并入 51213 分支。773/778→51232、774/780→49185、775/779→51234 均按官方 App 全集确认(移除不存在的 51235 依赖)。
+- **`get_cur_state` 路由缺功能码** — 51232(空调执行器)/49156(新风档位)/51213(地暖加热)三个功能码未路由到对应解析器,会退回通用开关状态,现补全。
+- **`HVACMode.AUTO` 映射缺失** — `HVAC_MODE_MAP` 补 `AUTO: 4`(此前 `_attr_hvac_modes` 含 AUTO 而映射缺它,AUTO 会悄悄落成 0)。
+
+### 🧪 Tests
+
+- 新增 `tests/test_climate_adaptation.py`(20 项):地暖 bit4 解析、658/776 功能码、空调字节编码(`power=1,COOL,HIGH,24℃` → `0x68/0x0A`)、新风 level→载荷/功能码映射、`_build_entities` 三分类分派与 display 过滤。全套 65 项通过。
+
 ## V1.1.1 (2026-09-18)
 
 ### 🐛 Fixes
