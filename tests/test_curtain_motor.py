@@ -36,6 +36,7 @@ from custom_components.leelen_home.leelen.common.LeelenType import (  # noqa: E4
     APCIType, DeviceType, LogicDeviceType, PropertyId,
 )
 from custom_components.leelen_home.leelen.models.ControlModel import ControlModel  # noqa: E402
+from custom_components.leelen_home.leelen.common.CommonModel import CommonModel  # noqa: E402
 
 #: 真实 dump.db:窗帘电机设备 224/240,逻辑通道 570(纱帘/布帘),可写 163 在 225/241。
 _MOTOR_DEV = 224
@@ -261,6 +262,26 @@ class TestCurtainMotorPress(unittest.TestCase):
         frame = captured["data"]
         assert frame[34:36] == bytes([1, 6])
         assert frame[41:48] == bytes.fromhex("01056401a30101"), frame.hex()
+
+    def test_update_state_is_awaitable_noop(self):
+        """按钮无状态但挂在电机 logic_addr 上,会被 StateUpdateSubscriber 派发到。
+
+        基类 ``_handle_state_event`` 固定 ``await self.update_state(state)``:实现
+        缺失曾是 AttributeError,同步实现则 ``await None`` 抛 TypeError(两种线上
+        都炸过)。钉死:必须是协程且可空转。
+        """
+        for cls in (CurtainMotorDirectionButton, CurtainMotorResetButton):
+            entity = cls(_MOTOR_LOGIC, _MOTOR_DEV, "纱帘", "窗帘电机",
+                         _mock_config_entry(), {"direction": 0})
+            result = entity.update_state(None)
+            assert asyncio.iscoroutine(result), f"{cls.__name__}.update_state 需为协程"
+            asyncio.run(result)  # 可 await 且不抛
+            # 完整走一遍基类派发路径:匹配地址 + get_cur_state + await + 写状态。
+            # 实体未挂 hass,async_write_ha_state 一并 mock 掉。
+            event = Mock(logic_address=_MOTOR_LOGIC, function_id=1, state=b"")
+            with patch.object(CommonModel, "get_instance"), \
+                    patch.object(entity, "async_write_ha_state"):
+                asyncio.run(entity._handle_state_event(event))
 
 
 # ------------------------------------------------- config_flow 白名单

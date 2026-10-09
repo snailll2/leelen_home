@@ -167,12 +167,14 @@ class DeviceLocateButton(LeelenEntity, ButtonEntity):
         ControlModel.get_instance().device_hint(self._device_id, DeviceMode.MODE_FLASH)
 
 
-class CurtainMotorDirectionButton(LeelenEntity, ButtonEntity):
-    """更改电机方向按钮:press 后翻转方向位并下发属性写帧。
+class CurtainMotorButton(LeelenEntity, ButtonEntity):
+    """窗帘电机按钮公共基类:持有同通道共享的方向状态。
 
-    值字节 bit0=方向(0正/1反)。按下即发 ``1 - 当前方向`` 的取反值,并把方向
-    状态乐观更新 —— 与官方 App ``updateLogicServiceInfo(true)``
-    (``1 ^ mIsReverse``)一致。方向初值取设备库属性 163 现值。
+    ``_logic_addr`` 是电机的逻辑通道地址,与同名 cover 实体相同,因此
+    ``StateUpdateSubscriber`` 会把该通道的状态事件一并派发到按钮上 ——
+    但按钮是**无状态瞬态动作**,不消费状态推送,故 ``update_state`` 置为
+    空实现(否则基类 ``_handle_state_event`` 调不到方法,每次推送都抛
+    AttributeError)。链路可用性订阅保留,available 变化仍会刷新。
     """
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -180,8 +182,24 @@ class CurtainMotorDirectionButton(LeelenEntity, ButtonEntity):
     def __init__(self, logic_addr, device_id, name: str, dev_name: str,
                  config_entry: ConfigEntry, state: dict):
         super().__init__(logic_addr, device_id, name, dev_name, config_entry)
-        # state 与同通道「重置行程」按钮共享(重置要保留当前方向位)。
+        # state 与同通道另一按钮共享(重置要保留当前方向位)。
         self._state = state
+
+    async def update_state(self, state) -> None:
+        """无状态:电机通道的状态由 cover 实体消费,按钮忽略。
+
+        必须是协程 —— 基类 ``_handle_state_event`` 固定 ``await self.update_state(...)``,
+        同步实现会返回 None,``await None`` 抛 TypeError。
+        """
+
+
+class CurtainMotorDirectionButton(CurtainMotorButton):
+    """更改电机方向按钮:press 后翻转方向位并下发属性写帧。
+
+    值字节 bit0=方向(0正/1反)。按下即发 ``1 - 当前方向`` 的取反值,并把方向
+    状态乐观更新 —— 与官方 App ``updateLogicServiceInfo(true)``
+    (``1 ^ mIsReverse``)一致。方向初值取设备库属性 163 现值。
+    """
 
     @property
     def unique_id(self) -> str:
@@ -204,20 +222,13 @@ class CurtainMotorDirectionButton(LeelenEntity, ButtonEntity):
         self._state["direction"] = new_direction
 
 
-class CurtainMotorResetButton(LeelenEntity, ButtonEntity):
+class CurtainMotorResetButton(CurtainMotorButton):
     """重置行程按钮:press 后下发属性写帧,bit1 置 1 触发行程重置。
 
     值字节 = ``当前方向 + 2``(bit0 原样保留方向,bit1=2 触发重置) —— 与官方
     App ``updateLogicServiceInfo(false)``(``mIsReverse + 2``)一致。同通道的
     「更改方向」按钮翻转方向后,重置会带上新方向,二者状态通过共享 dict 同步。
     """
-
-    _attr_entity_category = EntityCategory.CONFIG
-
-    def __init__(self, logic_addr, device_id, name: str, dev_name: str,
-                 config_entry: ConfigEntry, state: dict):
-        super().__init__(logic_addr, device_id, name, dev_name, config_entry)
-        self._state = state
 
     @property
     def unique_id(self) -> str:
